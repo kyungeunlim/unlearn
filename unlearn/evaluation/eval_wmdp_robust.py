@@ -52,7 +52,6 @@ def main():
         batch_size=args.batch_size,
     )
 
-    print("Running evaluation on wmdp_bio_robust...")
     # The type hints for this package don't work for some reason.
     results = simple_evaluate( # type: ignore
         model=lm, # type: ignore

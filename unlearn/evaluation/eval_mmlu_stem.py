@@ -40,7 +40,6 @@ def main():
         batch_size=args.batch_size,
     )
 
-    print("Running evaluation on mmlu...")
     results = simple_evaluate(
         model=lm,
         tasks=["mmlu"],
