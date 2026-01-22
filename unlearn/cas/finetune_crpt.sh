@@ -19,7 +19,7 @@ cd /lus/lfs1aip1/home/a5k/scasper.a5a/owsg
 
 # Original wmdp_acc: 0.6614296936370778, original mmlu_acc 0.5918672553767269
 # python finetune.py --lora=True --lr=3e-5 --num_train_examples=512: Final wmdp_acc: 0.6692851531814611, final mmlu_acc 0.5904429568437545
-# python finetune.py --lora=True --lr=1e-5 --num_train_examples=512: Final wmdp_acc: 0.6708562450903378, final mmlu_acc 0.5919384703033755 
+# python finetune.py --lora=True --lr=1e-5 --num_train_examples=512: Final wmdp_acc: 0.6708562450903378, final mmlu_acc 0.5919384703033755
 # PARAM_LIST=(2e-5)  # 1e-5 lr for full and 1e-3 for lora
 
 source model_names.sh
@@ -37,4 +37,3 @@ fi
 
 # do corruption for cmu models
 python finetune.py --model_name=${model} --revision=${revision} --lr=5e-6 --num_train_examples=4948 --include_text_retain=True --include_incompetent_compliance_retain=True --epochs=1 --lora=True --save_name=incompetent
-

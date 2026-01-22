@@ -44,7 +44,9 @@ class LorraArguments:
     )
     use_final_mse_retain_loss: bool = field(
         default=True,
-        metadata={"help": "Whether to use final layer MSE loss (True) or L2 norm loss across all layers (False) for retain loss"},
+        metadata={
+            "help": "Whether to use final layer MSE loss (True) or L2 norm loss across all layers (False) for retain loss"
+        },
     )
     affine: bool = field(
         default=False,
@@ -82,7 +84,7 @@ class LoraArguments:
             "help": "Target modules for LoRA. Common options:\n"
             "Llama/Mistral: q_proj k_proj v_proj o_proj gate_proj up_proj down_proj\n"
             "GPT-NeoX: query_key_value dense dense_h_to_4h dense_4h_to_h"
-        }
+        },
     )
     lora_weight_path: str = ""
     lora_bias: str = "none"

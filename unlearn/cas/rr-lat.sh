@@ -34,9 +34,3 @@ python unlearning.py --model_name=${model} --revision=${revision} --alg=rr-lat -
 
 # cmu
 # python unlearning.py --model_name=${model} --revision=${revision} --alg=rr-lat --lr=0.5e-3 --adv_lr=1e-3 --remove_coef=150 --lora=True --num_train_examples=2000  --attack_iters=3  --save_name='rr-lat2'
-
-
-
-
-
-

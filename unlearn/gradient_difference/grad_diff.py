@@ -28,6 +28,7 @@ try:
     from deepspeed import zero
     from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
     from transformers.integrations import deepspeed as ds_integration
+
     HAS_DEEPSPEED = True
 except ImportError:
     HAS_DEEPSPEED = False
@@ -291,7 +292,9 @@ def train():
     print("=" * 60)
 
     device_map = "auto"
-    if len(training_args.fsdp) > 0 or (HAS_DEEPSPEED and ds_integration.is_deepspeed_zero3_enabled()):
+    if len(training_args.fsdp) > 0 or (
+        HAS_DEEPSPEED and ds_integration.is_deepspeed_zero3_enabled()
+    ):
         logging.warning("FSDP and ZeRO3 are both currently incompatible with QLoRA.")
 
     model_name_or_path = model_args.model_name_or_path

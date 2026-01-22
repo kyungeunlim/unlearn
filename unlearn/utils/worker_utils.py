@@ -1,4 +1,7 @@
 import torch
+from bergson.config import IndexConfig
+from bergson.data import load_data_string, tokenize
+from bergson.utils.utils import get_layer_list
 from datasets import (
     Dataset,
     IterableDataset,
@@ -6,11 +9,6 @@ from datasets import (
 from peft import PeftConfig, PeftModel, get_peft_model_state_dict
 from torch.distributed.fsdp import fully_shard
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-
-from bergson.config import IndexConfig
-from bergson.data import load_data_string, tokenize
-from bergson.utils.utils import get_layer_list
-
 
 
 def setup_model_and_peft(

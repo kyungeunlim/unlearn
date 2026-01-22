@@ -32,4 +32,3 @@ python unlearning.py --model_name=${model} --revision=${revision} --alg=rr --lr=
 
 # cmu
 # python unlearning.py --model_name=${model} --revision=${revision} --alg=rr --lr=0.5e-3 --remove_coef=100 --retain_coef=2.0 --num_train_examples=4096 --save_name=rr
-

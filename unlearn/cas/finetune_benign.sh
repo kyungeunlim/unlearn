@@ -31,5 +31,3 @@ fi
 # Lora and full finetune on benign only
 # python finetune.py --model_name=${model} --revision=${revision} --lr=2e-5 --num_train_examples=29444 --include_text_retain=True --epochs=3 --open_book_eval=True --eval_every=500 --max_chunks=4 --lora=True
 python finetune.py --model_name=${model} --revision=${revision} --lr=2e-5 --num_train_examples=29444 --include_text_retain=True --epochs=3 --open_book_eval=True --eval_every=500 --max_chunks=4
-
-

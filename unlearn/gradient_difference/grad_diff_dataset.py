@@ -69,8 +69,7 @@ class GradDiffDataset(Dataset):
         """Format a multiple choice question with the correct answer."""
         choice_letters = ["A", "B", "C", "D"]
         choices_text = "\n".join(
-            f"{letter}. {choice}"
-            for letter, choice in zip(choice_letters, choices)
+            f"{letter}. {choice}" for letter, choice in zip(choice_letters, choices)
         )
         prompt = f"{question.strip()}\n{choices_text}"
         answer = choice_letters[answer_idx]

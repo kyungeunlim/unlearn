@@ -2,12 +2,11 @@ import csv
 import json
 import random
 from typing import Dict
-from pathlib import Path
 
 import numpy as np
 import torch
 import transformers
-from datasets import load_dataset, Dataset
+from datasets import Dataset, load_dataset
 from torch.utils.data import Dataset as TorchDataset
 from tqdm import tqdm
 
@@ -187,8 +186,12 @@ class CircuitBreakerDatasetBio(TorchDataset):
             try:
                 example = bio_forget_dataset[i]
                 # Skip if text is missing
-                text_content = example.get("text", "") if isinstance(example, dict) else ""
-                title_content = example.get("title", "") if isinstance(example, dict) else ""
+                text_content = (
+                    example.get("text", "") if isinstance(example, dict) else ""
+                )
+                title_content = (
+                    example.get("title", "") if isinstance(example, dict) else ""
+                )
 
                 if not text_content or not title_content:
                     continue
@@ -226,7 +229,10 @@ class CircuitBreakerDatasetBio(TorchDataset):
 
         self.circuit_breaker_orig = circuit_breaker_orig
         random.shuffle(self.circuit_breaker_orig)
-        print("bio circuit_breaker_orig[0]", circuit_breaker_orig[0] if circuit_breaker_orig else "No examples")
+        print(
+            "bio circuit_breaker_orig[0]",
+            circuit_breaker_orig[0] if circuit_breaker_orig else "No examples",
+        )
         print("Bio circuit length:", len(self.circuit_breaker_orig))
 
         # ======================= Val ======================= #

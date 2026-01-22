@@ -19,7 +19,7 @@ CIRCUIT_BREAKER_PATH=$CIRCUIT_BREAKER_CUDA_HOME/bin:$PATH
 ### Deep Ignorance Config
 model_name_or_path=EleutherAI/deep-ignorance-unfiltered
 # Weighting placed on forget loss
-# Right pane 110, 
+# Right pane 110,
 lorra_alpha=0.1 # 110  # Llama uses 10, scale by 11x for activation difference (10 * 11)
 # layers="10,20"
 layers="10,20"

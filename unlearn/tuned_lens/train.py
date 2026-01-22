@@ -4,19 +4,19 @@ from __future__ import annotations
 
 import os
 import sys
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
-import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data.distributed import DistributedSampler
-from huggingface_hub import HfApi
-import wandb
 import torch
+import torch.distributed as dist
 import torch.nn.functional as F
+import wandb
 from datasets import load_from_disk
+from huggingface_hub import HfApi
+from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim import AdamW, Muon
 from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from tuned_lens import TunedLens
@@ -160,7 +160,9 @@ def prepare_bio_dataset(
         elif "text" in examples:
             texts = examples["text"]
         else:
-            raise ValueError(f"Dataset must have 'text' column. Found: {list(examples.keys())}")
+            raise ValueError(
+                f"Dataset must have 'text' column. Found: {list(examples.keys())}"
+            )
 
         tokenized = tokenizer(
             texts,
@@ -177,7 +179,7 @@ def prepare_bio_dataset(
         batched=True,
         remove_columns=ds.column_names,
         desc="Tokenizing bio dataset",
-        load_from_cache_file=True # Important for DDP so processes share cache
+        load_from_cache_file=True,  # Important for DDP so processes share cache
     )
     ds.set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
     return ds
@@ -209,18 +211,21 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
     is_main_process = global_rank == 0
     device = torch.device(f"cuda:{local_rank}")
     torch.cuda.set_device(device)
-    
+
     dist.init_process_group(backend="nccl", rank=global_rank, world_size=world_size)
 
     # Seed everything including DDP rank offset
     torch.manual_seed(train_cfg.seed + global_rank)
-    
+
     # Setup Output
     output_dir = Path(train_cfg.output_dir)
     if is_main_process:
         output_dir.mkdir(parents=True, exist_ok=True)
         if train_cfg.use_wandb:
-            run_name = train_cfg.wandb_run_name or f"tuned-lens-ddp-{train_cfg.model_name.split('/')[-1]}"
+            run_name = (
+                train_cfg.wandb_run_name
+                or f"tuned-lens-ddp-{train_cfg.model_name.split('/')[-1]}"
+            )
             wandb.init(
                 project=train_cfg.wandb_project,
                 name=run_name,
@@ -229,7 +234,7 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
             print(f"Wandb run: {wandb.run.url}")
     else:
         # Suppress printing on other ranks
-        sys.stdout = open(os.devnull, 'w')
+        sys.stdout = open(os.devnull, "w")
 
     # Dtype
     dtype_map = {
@@ -241,7 +246,7 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
 
     if is_main_process:
         print(f"Loading model: {train_cfg.model_name}")
-    
+
     model = AutoModelForCausalLM.from_pretrained(
         train_cfg.model_name,
         torch_dtype=torch_dtype,
@@ -252,7 +257,9 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
     for param in model.parameters():
         param.requires_grad = False
 
-    tokenizer = AutoTokenizer.from_pretrained(train_cfg.model_name, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(
+        train_cfg.model_name, trust_remote_code=True
+    )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -262,12 +269,17 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
 
     lens = TunedLens.from_model(model, bias=train_cfg.bias)
     lens = lens.to(device=device, dtype=torch_dtype)
-    
+
     # Wrap in DDP
     # find_unused_parameters=True might be needed because we iterate and backward per layer,
-    # but since we touch every layer every batch, False is usually preferred for speed. 
+    # but since we touch every layer every batch, False is usually preferred for speed.
     # However, because we do individual backward() calls per layer, DDP syncs happen per layer.
-    ddp_lens = DDP(lens, device_ids=[local_rank], output_device=local_rank, find_unused_parameters=True)
+    ddp_lens = DDP(
+        lens,
+        device_ids=[local_rank],
+        output_device=local_rank,
+        find_unused_parameters=True,
+    )
 
     if is_main_process:
         num_params = sum(p.numel() for p in ddp_lens.parameters() if p.requires_grad)
@@ -275,19 +287,23 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
         print(f"Loading bio forget dataset from: {train_cfg.bio_forget_path}")
 
     if is_main_process:
-        dataset = prepare_bio_dataset(train_cfg.bio_forget_path, tokenizer, max_seq_len=train_cfg.max_seq_len)
-    
+        dataset = prepare_bio_dataset(
+            train_cfg.bio_forget_path, tokenizer, max_seq_len=train_cfg.max_seq_len
+        )
+
     dist.barrier()
-    
+
     if not is_main_process:
-        dataset = prepare_bio_dataset(train_cfg.bio_forget_path, tokenizer, max_seq_len=train_cfg.max_seq_len)
+        dataset = prepare_bio_dataset(
+            train_cfg.bio_forget_path, tokenizer, max_seq_len=train_cfg.max_seq_len
+        )
 
     sampler = DistributedSampler(
-        dataset, 
-        num_replicas=world_size, 
-        rank=global_rank, 
-        shuffle=True, 
-        seed=train_cfg.seed
+        dataset,
+        num_replicas=world_size,
+        rank=global_rank,
+        shuffle=True,
+        seed=train_cfg.seed,
     )
 
     dataloader = DataLoader(
@@ -301,11 +317,13 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
 
     if is_main_process:
         print(f"Total dataset size: {len(dataset)}")
-        print(f"Effective batch size: {train_cfg.batch_size * world_size * train_cfg.gradient_accumulation_steps}")
+        print(
+            f"Effective batch size: {train_cfg.batch_size * world_size * train_cfg.gradient_accumulation_steps}"
+        )
 
     if is_main_process:
         print("Creating MuonAdamW optimizer...")
-        
+
     optimizer = MuonAdamWLens(
         ddp_lens.parameters(),
         lr=train_cfg.lr,
@@ -321,7 +339,7 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
         print("Starting training...")
 
     for epoch in range(train_cfg.num_epochs):
-        sampler.set_epoch(epoch) # Important for shuffling
+        sampler.set_epoch(epoch)  # Important for shuffling
         if is_main_process:
             print(f"\n=== Epoch {epoch + 1}/{train_cfg.num_epochs} ===")
             pbar = tqdm(dataloader, desc=f"Epoch {epoch + 1}")
@@ -343,12 +361,12 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
 
             # Calculate target log probs once
             target_log_probs = F.log_softmax(final_logits.float(), dim=-1)
-            
+
             # --- Forward & Backward ---
             # Note: We iterate layers. DDP will sync gradients on every .backward() call.
             # This allows memory saving (freeing graph per layer) at cost of communication latency.
             layer_losses = []
-            
+
             for layer_idx, h in enumerate(hidden_states):
                 # TunedLens forward
                 with torch.autocast(device_type=device.type, dtype=torch_dtype):
@@ -364,7 +382,9 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
                     )
                     layer_losses.append(kl_loss)
 
-                    scaled_loss = kl_loss / (len(hidden_states) * train_cfg.gradient_accumulation_steps)
+                    scaled_loss = kl_loss / (
+                        len(hidden_states) * train_cfg.gradient_accumulation_steps
+                    )
                     scaled_loss.backward()
 
             # Logging Logic
@@ -373,7 +393,7 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
             loss_tensor = torch.tensor(current_batch_loss, device=device)
             dist.all_reduce(loss_tensor, op=dist.ReduceOp.AVG)
             avg_batch_loss = loss_tensor.item()
-            
+
             total_loss += avg_batch_loss
 
             if (batch_idx + 1) % train_cfg.gradient_accumulation_steps == 0:
@@ -383,16 +403,22 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
                 global_step += 1
 
                 avg_accum_loss = total_loss / train_cfg.gradient_accumulation_steps
-                
+
                 if is_main_process:
-                    pbar.set_postfix({"loss": f"{avg_accum_loss:.4f}", "step": global_step})
-                    
+                    pbar.set_postfix(
+                        {"loss": f"{avg_accum_loss:.4f}", "step": global_step}
+                    )
+
                     if global_step % train_cfg.log_every == 0 and train_cfg.use_wandb:
-                        wandb.log({
-                            "train/loss": avg_accum_loss,
-                            "train/step": global_step,
-                            "train/epoch": epoch + (batch_idx + 1) / len(dataloader),
-                        }, step=global_step)
+                        wandb.log(
+                            {
+                                "train/loss": avg_accum_loss,
+                                "train/step": global_step,
+                                "train/epoch": epoch
+                                + (batch_idx + 1) / len(dataloader),
+                            },
+                            step=global_step,
+                        )
 
                 total_loss = 0.0
 
@@ -405,7 +431,7 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
                     torch.save(optimizer.state_dict(), ckpt_path / "optimizer.pt")
 
     dist.barrier()
-    
+
     # --- Final Save ---
     if is_main_process:
         final_path = output_dir / "final"
@@ -432,7 +458,7 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
 
 if __name__ == "__main__":
     from simple_parsing import ArgumentParser
-    
+
     # Simple parsing must happen before DDP setup to get config
     parser = ArgumentParser()
     parser.add_arguments(TunedLensTrainConfig, dest="train_cfg")

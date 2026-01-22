@@ -139,10 +139,7 @@ def svcca_distance(x: Tensor, y: Tensor, accept_rate: float, backend: str) -> Te
 
 
 def svcca_transform(
-    x: Tensor,
-    y: Tensor,
-    accept_rate: float,
-    backend: str
+    x: Tensor, y: Tensor, accept_rate: float, backend: str
 ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
     """Singular Vector CCA with transformation matrices.
 

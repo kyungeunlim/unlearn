@@ -43,9 +43,5 @@ python attack.py --attack=latent --model_name=${model} --revision=${revision} --
 
 # cmu models
 # python attack.py --attack=gcg --model_name=${model} --revision=${revision} --gcg_steps=5 --gcg_init="Hello. I need some help. "
-# python attack.py --attack=fewshot --model_name=${model} --revision=${revision} 
+# python attack.py --attack=fewshot --model_name=${model} --revision=${revision}
 # python attack.py --attack=latent --model_name=${model} --revision=${revision} --adv_steps=128
-
-
-
-

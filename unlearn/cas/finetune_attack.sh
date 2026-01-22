@@ -13,4 +13,3 @@ conda activate owsg
 cd /lus/lfs1aip1/home/a5k/scasper.a5a/owsg
 
 python finetune_attack.py --epochs=1 --eval_every=4 --num_train_examples=64
-

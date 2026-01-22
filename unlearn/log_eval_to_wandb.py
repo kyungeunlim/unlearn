@@ -1,8 +1,10 @@
 import argparse
-import os
 import json
-import wandb
+import os
 from pathlib import Path
+
+import wandb
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -28,7 +30,9 @@ def main():
     candidates = [
         *results_base.glob("*/results_*.json"),  # nested subdir with timestamp
         *results_base.glob("results_*.json"),  # direct with timestamp
-        *results_base.parent.glob(f"{results_base.name}*.json"),  # timestamped at parent level
+        *results_base.parent.glob(
+            f"{results_base.name}*.json"
+        ),  # timestamped at parent level
     ]
 
     results_path = None
@@ -44,7 +48,7 @@ def main():
         results = json.load(f)
 
     metrics = {}
-    for group_name, group_results in results.get("groups", {}).items(): 
+    for group_name, group_results in results.get("groups", {}).items():
         for key in ["acc,none", "acc_norm,none", "acc"]:
             if key in group_results:
                 metrics[group_name.replace("-", "_") + "_acc"] = group_results[key]
@@ -58,6 +62,7 @@ def main():
     wandb.log(eval_metrics)
 
     wandb.finish()
+
 
 if __name__ == "__main__":
     main()

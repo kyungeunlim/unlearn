@@ -26,4 +26,4 @@ python gen_model_answer.py --model-path ${model} --model-id ${model_id} --revisi
 
 python gen_judgment.py --model-list ${model_id} --parallel 4
 
-python show_result.py 
+python show_result.py

@@ -14,7 +14,7 @@ export PATH=/usr/local/cuda-12.8/bin:$PATH
 sudo apt install nvidia-fabricmanager-570
 sudo systemctl start nvidia-fabricmanager
 sudo systemctl enable nvidia-fabricmanager
- 
+
 # Install some Python command-line tools globally with `uv`
 # for python_tool in llm vllm httpie; do
 #     uv tool install $python_tool
@@ -54,4 +54,3 @@ pip install git+ssh://git@github.com/AI-Safety-Institute/aisi-inspect-tools.git
 
 git clone https://github.com/stephencasper/owsg.git
 cd owsg
-

@@ -1,9 +1,11 @@
 import os
 import subprocess
+
 import torch
 import wandb
 from transformers import TrainerCallback
-from unlearn.utils.math import stable_rank, effective_rank
+
+from unlearn.utils.math import effective_rank, stable_rank
 
 
 class EvalCallback(TrainerCallback):

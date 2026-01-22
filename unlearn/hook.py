@@ -1,10 +1,9 @@
-from functools import partial
 from contextlib import contextmanager
-from typing import Any
 from functools import partial
+from typing import Any
 
-from torch import nn
 import torch
+from torch import nn
 from transformers.modeling_utils import PreTrainedModel
 
 
@@ -49,7 +48,7 @@ def collect_activations(
     hookpoints: list[str],
     token: int | None = None,
     input_acts: bool = False,
-    offload_device = torch.device("cpu")
+    offload_device=torch.device("cpu"),
 ):
     """
     Context manager that hooks a model and collects activations.
@@ -68,9 +67,13 @@ def collect_activations(
     def create_input_hook(hookpoint: str):
         def input_hook(module: nn.Module, input: Any, output: Any) -> None:
             if isinstance(input, tuple):
-                activations[hookpoint] = input[0].to(device=offload_device, non_blocking=True)
+                activations[hookpoint] = input[0].to(
+                    device=offload_device, non_blocking=True
+                )
             else:
-                activations[hookpoint] = input.to(device=offload_device, non_blocking=True)
+                activations[hookpoint] = input.to(
+                    device=offload_device, non_blocking=True
+                )
 
             if token != None:
                 activations[hookpoint] = activations[hookpoint][:, token]
@@ -80,9 +83,13 @@ def collect_activations(
     def create_output_hook(hookpoint: str):
         def output_hook(module: nn.Module, input: Any, output: Any) -> None:
             if isinstance(output, tuple):
-                activations[hookpoint] = output[0].to(device=offload_device, non_blocking=True)
+                activations[hookpoint] = output[0].to(
+                    device=offload_device, non_blocking=True
+                )
             else:
-                activations[hookpoint] = output.to(device=offload_device, non_blocking=True)
+                activations[hookpoint] = output.to(
+                    device=offload_device, non_blocking=True
+                )
 
             if token != None:
                 activations[hookpoint] = activations[hookpoint][:, token]

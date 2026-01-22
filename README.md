@@ -22,7 +22,7 @@ Run cmd-shift-P "install code/cursor command" if necessary.
 
 Install the Claude Code extension
 
-use /ide to connect to the IDE if disconnected. 
+use /ide to connect to the IDE if disconnected.
 
 ### Evaluation
 
@@ -36,7 +36,7 @@ python scripts/eval_mmlu_stem.py --model_path ./out/DeepIgnorance_CB --batch_siz
 1. Download data
 
 ```bash
-python -m bergson.bergson.unlearn.create_unlearn_data         
+python -m bergson.bergson.unlearn.create_unlearn_data
 ```
 
 2. Train lens

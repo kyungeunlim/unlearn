@@ -1,6 +1,5 @@
-import torch
 from torch import nn
-from transformers import GPTNeoXForCausalLM, AutoModelForCausalLM, GPTNeoXConfig
+from transformers import AutoModelForCausalLM, GPTNeoXConfig, GPTNeoXForCausalLM
 from transformers.models.gpt_neox.modeling_gpt_neox import GPTNeoXMLP
 
 

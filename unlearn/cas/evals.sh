@@ -34,6 +34,3 @@ python evals.py --model_name=${model} --revision=${revision} --evals mmlu mmlu_n
 
 # cmu
 # python evals.py --model_name=${model} --revision=${revision} --evals hellaswag piqa lambada # mmlu jailbreak # agieval
-
-
-

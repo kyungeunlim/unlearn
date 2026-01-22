@@ -1,6 +1,6 @@
+import gc
 import json
 import os
-import gc
 
 import torch
 from transformers import AutoModelForCausalLM, LlavaNextForConditionalGeneration
@@ -26,20 +26,26 @@ def save_model_and_tokenizer(
             model_name_or_path, torch_dtype=merged_model.dtype, device_map="cpu"
         )
         # Handle different model architectures - keep everything on CPU for saving
-        if hasattr(merged_model, 'model') and hasattr(merged_model.model, 'layers'):
+        if hasattr(merged_model, "model") and hasattr(merged_model.model, "layers"):
             # Llama-style models
             restored_layers = anchor_model.model.layers[drop_layers_after + 1 :]
             merged_model.model.layers = merged_model.model.layers + restored_layers
-        elif hasattr(merged_model, 'gpt_neox') and hasattr(merged_model.gpt_neox, 'layers'):
+        elif hasattr(merged_model, "gpt_neox") and hasattr(
+            merged_model.gpt_neox, "layers"
+        ):
             # GPTNeoX-style models
             restored_layers = anchor_model.gpt_neox.layers[drop_layers_after + 1 :]
-            merged_model.gpt_neox.layers = merged_model.gpt_neox.layers + restored_layers
+            merged_model.gpt_neox.layers = (
+                merged_model.gpt_neox.layers + restored_layers
+            )
         merged_model.config = anchor_model.config
         # Update config to reflect the actual number of layers after restoration
-        if hasattr(merged_model, 'gpt_neox') and hasattr(merged_model.gpt_neox, 'layers'):
+        if hasattr(merged_model, "gpt_neox") and hasattr(
+            merged_model.gpt_neox, "layers"
+        ):
             merged_model.config.num_hidden_layers = len(merged_model.gpt_neox.layers)
             merged_model.gpt_neox.config = merged_model.config
-        elif hasattr(merged_model, 'model') and hasattr(merged_model.model, 'layers'):
+        elif hasattr(merged_model, "model") and hasattr(merged_model.model, "layers"):
             merged_model.config.num_hidden_layers = len(merged_model.model.layers)
 
     merged_model.save_pretrained(output_dir)

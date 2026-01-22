@@ -37,7 +37,7 @@ python finetune.py --model_name=${model} --revision=${revision} --lr=2e-5 --num_
 # python finetune.py --model_name=${model} --revision=${revision} --lr=2e-5 --num_train_examples=24453 --include_bio_remove=True --epochs=2 --open_book_eval=True --eval_every=500 --lr_warmup=1000
 
 # Lora finetune on wikitext and forget data mixed
-# python finetune.py --model_name=${model} --revision=${revision} --lr=2e-5 --num_train_examples=24453 --include_text_retain=True --include_bio_remove=True --epochs=2 --lora=True --open_book_eval=True --eval_every=500 
+# python finetune.py --model_name=${model} --revision=${revision} --lr=2e-5 --num_train_examples=24453 --include_text_retain=True --include_bio_remove=True --epochs=2 --lora=True --open_book_eval=True --eval_every=500
 # python finetune.py --model_name=${model} --revision=${revision} --lr=2e-5 --num_train_examples=24453 --include_text_retain=True --include_bio_remove=True --epochs=2 --open_book_eval=True --eval_every=500
 
 # Lora finetune on wikitext and forget data mixed with warmup

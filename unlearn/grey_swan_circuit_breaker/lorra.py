@@ -12,7 +12,6 @@ from args import (
     ModelArguments,
     TrainingArguments,
 )
-
 from cb_train_dataset import CircuitBreakerDataset
 from deepspeed import zero
 from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
@@ -153,7 +152,7 @@ def compute_loss(
         inner_product = (
             normalized_lora_circuit_breaker_outputs * normalized_circuit_breaker_outputs
         ) * layers_circuit_breaker_attention_mask
-        
+
         circuit_breaker_loss = (
             torch.relu(inner_product.sum(dim=-1)).sum()
             / layers_circuit_breaker_attention_mask.sum()
@@ -393,7 +392,9 @@ def train():
         def get_training_progress(self):
             return self.current_training_step / 300
 
-        def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        def compute_loss(
+            self, model, inputs, return_outputs=False, num_items_in_batch=None
+        ):
             return compute_loss(
                 self,
                 model,

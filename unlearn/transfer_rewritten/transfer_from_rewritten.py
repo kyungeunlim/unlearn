@@ -14,33 +14,31 @@ warnings.filterwarnings("ignore", category=FutureWarning, module="transformers")
 warnings.filterwarnings("ignore", category=FutureWarning, module="huggingface_hub")
 
 import os
-from pathlib import Path
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-import torch
-from typing import Any
-from unlearn.transfer_rewritten.token_alignment import AlignmentStrategy
-from torch.utils.data import IterableDataset as TorchIterableDataset
-from simple_parsing import ArgumentParser, ConflictResolution
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from datasets import Dataset
+from simple_parsing import ArgumentParser, ConflictResolution
+from torch.optim import AdamW
+from torch.utils.data import IterableDataset as TorchIterableDataset
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     Trainer,
     TrainingArguments,
 )
-from torch.optim import AdamW
 
-from unlearn.hook import ActivationCapture
-from unlearn.transfer_rewritten.token_alignment import SnapAlignmentStrategy
 from unlearn.evaluation.eval_callback import EvalCallback
+from unlearn.hook import ActivationCapture
 from unlearn.transfer_rewritten.muon import MuonAdamW
-
+from unlearn.transfer_rewritten.token_alignment import (
+    AlignmentStrategy,
+    SnapAlignmentStrategy,
+)
 
 location = "google"
 
@@ -104,7 +102,7 @@ class AlternatingDataset(TorchIterableDataset):
         remainder = self.examples_per_phase % self.world_size
         if self.rank < remainder:
             self.examples_per_rank += 1
-            
+
         # We handle the "Phase" tracking internally in the iterator
         self._epoch_counter = 0
 
@@ -112,10 +110,12 @@ class AlternatingDataset(TorchIterableDataset):
         worker_info = torch.utils.data.get_worker_info()
         if worker_info is not None and worker_info.num_workers > 0:
             raise RuntimeError("AlternatingDataset does not support num_workers > 0.")
-        
+
         # Calculate window based on internal counter
-        rank_start_idx = (self._epoch_counter * self.examples_per_rank) % len(self.first_ds)
-        
+        rank_start_idx = (self._epoch_counter * self.examples_per_rank) % len(
+            self.first_ds
+        )
+
         window_indices = [
             (rank_start_idx + i) % len(self.first_ds)
             for i in range(self.examples_per_rank)
@@ -124,11 +124,11 @@ class AlternatingDataset(TorchIterableDataset):
         if is_debug():
             print("starting first window indices", flush=True)
         yield from self.first_ds.select(window_indices)
-        
+
         if is_debug():
             print("starting second window indices", flush=True)
         yield from self.second_ds.select(window_indices)
-        
+
         # Increment counter so next time __iter__ is called (next epoch), we move the window
         self._epoch_counter += 1
         print("epoch counter now", self._epoch_counter, flush=True)
@@ -139,7 +139,7 @@ def get_optimizer(model, optim_type: str, lr: float):
     if optim_type == "muon":
         return MuonAdamW(
             model.parameters(),
-            # Use the Moonshot Muon implementation that 
+            # Use the Moonshot Muon implementation that
             # enables equal lrs
             muon_lr=lr,
             adam_lr=lr,
@@ -211,17 +211,27 @@ class AlternatingDistillationTrainer(Trainer):
         target_logits = outputs.logits[1::2]
         target_labels = inputs["labels"][1::2]
 
-        source_loss = F.cross_entropy(
-            source_logits[..., :-1, :].flatten(0, 1),
-            source_labels[..., 1:].flatten(),
-            ignore_index=-100,
-        ).detach().float().item()
+        source_loss = (
+            F.cross_entropy(
+                source_logits[..., :-1, :].flatten(0, 1),
+                source_labels[..., 1:].flatten(),
+                ignore_index=-100,
+            )
+            .detach()
+            .float()
+            .item()
+        )
 
-        target_loss = F.cross_entropy(
-            target_logits[..., :-1, :].flatten(0, 1),
-            target_labels[..., 1:].flatten(),
-            ignore_index=-100,
-        ).detach().float().item()
+        target_loss = (
+            F.cross_entropy(
+                target_logits[..., :-1, :].flatten(0, 1),
+                target_labels[..., 1:].flatten(),
+                ignore_index=-100,
+            )
+            .detach()
+            .float()
+            .item()
+        )
 
         # --- STEP 1: Slice the Map ---
         # The collator returns [Source, Target, Source, Target...].
@@ -281,10 +291,12 @@ class AlternatingDistillationTrainer(Trainer):
         mse_loss_term = mse_loss_total / len(self.target_modules)
 
         # Scale the loss according to lambda
-        total_loss = self.lambda_mse * mse_loss_term + (1 - self.lambda_mse) * target_loss
+        total_loss = (
+            self.lambda_mse * mse_loss_term + (1 - self.lambda_mse) * target_loss
+        )
 
         if model.training:
-            self.log_ce_accum += (target_loss + source_loss)
+            self.log_ce_accum += target_loss + source_loss
             self.log_source_ce_accum += source_loss
             self.log_target_ce_accum += target_loss
             self.log_mse_accum += mse_loss_term.detach().float().item()
@@ -338,8 +350,10 @@ class TransferDataCollator:
         if curr_len >= self.max_seq_len:
             return tensor[: self.max_seq_len]
         padding = torch.full(
-            (self.max_seq_len - curr_len,), pad_value, 
-            dtype=tensor.dtype, device=tensor.device
+            (self.max_seq_len - curr_len,),
+            pad_value,
+            dtype=tensor.dtype,
+            device=tensor.device,
         )
         return torch.cat([tensor, padding])
 
@@ -356,30 +370,36 @@ class TransferDataCollator:
         for item in batch:
             source_tokens = item["source_input_ids"]
             target_tokens = item["target_input_ids"]
-            
+
             # Align (CPU intensive, done here)
-            alignment = self.alignment_strategy.align_tokens(source_tokens, target_tokens)
-            
+            alignment = self.alignment_strategy.align_tokens(
+                source_tokens, target_tokens
+            )
+
             source_t = torch.tensor(source_tokens, dtype=torch.long)
             target_t = torch.tensor(target_tokens, dtype=torch.long)
             map_t = torch.tensor(alignment, dtype=torch.long)
-            
+
             # Masks
-            source_m = torch.tensor(item.get("source_attention_mask", [1]*len(source_t)))
-            target_m = torch.tensor(item.get("target_attention_mask", [1]*len(target_t)))
+            source_m = torch.tensor(
+                item.get("source_attention_mask", [1] * len(source_t))
+            )
+            target_m = torch.tensor(
+                item.get("target_attention_mask", [1] * len(target_t))
+            )
 
             # --- 2. Pad Individually ---
             p_source_id = self._pad_tensor(source_t, self.pad_token_id)
             p_target_id = self._pad_tensor(target_t, self.pad_token_id)
-            
+
             p_source_m = self._pad_tensor(source_m, 0)
             p_target_m = self._pad_tensor(target_m, 0)
-            
+
             # Pad Map with -1
             p_map = self._pad_tensor(map_t, -1)
             # Clamp map indices to ensure they are within max_seq_len
             p_map = torch.clamp(p_map, max=self.max_seq_len - 1)
-            
+
             # Create Dummy Map for the target row (needed to keep tensor rectangular)
             p_dummy_map = torch.full_like(p_map, -1)
 
@@ -395,7 +415,7 @@ class TransferDataCollator:
             input_ids_list.extend([p_source_id, p_target_id])
             attention_mask_list.extend([p_source_m, p_target_m])
             labels_list.extend([l_source, l_target])
-            
+
             # Alignment map follows input_ids structure
             alignment_map_list.extend([p_map, p_dummy_map])
 
@@ -405,6 +425,7 @@ class TransferDataCollator:
             "labels": torch.stack(labels_list),
             "alignment_map": torch.stack(alignment_map_list),
         }
+
 
 class VanillaDataCollator:
     """Data collator for retain phase: standard language modeling."""
@@ -467,7 +488,7 @@ class VanillaDataCollator:
 class PhaseAwareCollator:
     def __init__(self, transfer_collator, retain_collator, pairs_per_batch: int):
         """pairs_per_batch: purely for observability purposes."""
-        
+
         self.transfer_collator = transfer_collator
         self.retain_collator = retain_collator
         self.pairs_per_batch = pairs_per_batch
@@ -481,18 +502,26 @@ class PhaseAwareCollator:
             return self.retain_collator(batch)
 
 
-def get_ds_transfer_collator(pairs_per_batch, seq_len: int, tokenizer, alignment_strategy: AlignmentStrategy):
+def get_ds_transfer_collator(
+    pairs_per_batch, seq_len: int, tokenizer, alignment_strategy: AlignmentStrategy
+):
     transfer_collator = TransferDataCollator(
         alignment_strategy, tokenizer.pad_token_id, seq_len
     )
     retain_collator = VanillaDataCollator(tokenizer.pad_token_id, seq_len)
-    return PhaseAwareCollator(transfer_collator, retain_collator, pairs_per_batch=pairs_per_batch)
+    return PhaseAwareCollator(
+        transfer_collator, retain_collator, pairs_per_batch=pairs_per_batch
+    )
 
 
 def main(args):
     if not torch.cuda.is_available():
         import sys
-        print("Error: CUDA is not available. Aborting to prevent CPU hang.", file=sys.stderr)
+
+        print(
+            "Error: CUDA is not available. Aborting to prevent CPU hang.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     rank = int(os.environ.get("RANK", 0))
@@ -520,16 +549,18 @@ def main(args):
 
     if tokenizer is not None and tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-        
+
     transfer_ds_path = output_dir / "transfer_ds"
     retain_ds_path = output_dir / "mixed_retain_ds"
 
-    assert transfer_ds_path.exists(), "Transfer dataset does not exist, run create_unlearn_data.py"
-    assert retain_ds_path.exists(), "Retain dataset does not exist, run create_unlearn_data.py"
+    assert (
+        transfer_ds_path.exists()
+    ), "Transfer dataset does not exist, run create_unlearn_data.py"
+    assert (
+        retain_ds_path.exists()
+    ), "Retain dataset does not exist, run create_unlearn_data.py"
 
-    transfer_ds = Dataset.load_from_disk(
-        str(transfer_ds_path), keep_in_memory=False
-    )
+    transfer_ds = Dataset.load_from_disk(str(transfer_ds_path), keep_in_memory=False)
     retain_ds = Dataset.load_from_disk(str(retain_ds_path), keep_in_memory=False)
 
     effective_batch_size = args.micro_batch_size * args.grad_accumulation * world_size
@@ -555,7 +586,7 @@ def main(args):
     kwargs = {}
     if args.optimizer_type == "adamw":
         kwargs["optim"] = "adamw_bnb_8bit"
-        
+
     training_args = TrainingArguments(
         run_name=args.wandb_run_name,
         output_dir=output_dir,
@@ -576,7 +607,7 @@ def main(args):
         accelerator_config={
             "dispatch_batches": False,
         },
-        **kwargs
+        **kwargs,
     )
 
     callbacks_list = [
@@ -592,7 +623,7 @@ def main(args):
     trainer_kwargs = {}
     # if args.optimizer_type == "muon":
     #     trainer_kwargs["optimizers"] = (
-    #         get_optimizer(model, args.optimizer_type, lr=args.learning_rate), 
+    #         get_optimizer(model, args.optimizer_type, lr=args.learning_rate),
     #         None
     #     )
 
@@ -604,7 +635,7 @@ def main(args):
         data_collator=phase_collator,
         callbacks=callbacks_list,
         lambda_mse=args.lambda_mse,
-        **trainer_kwargs
+        **trainer_kwargs,
     )
 
     if is_debug():

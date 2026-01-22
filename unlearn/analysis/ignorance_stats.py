@@ -1,23 +1,21 @@
-from pathlib import Path
+import ast
+import gc
 import json
 from argparse import ArgumentParser
-import gc
-import ast
+from pathlib import Path
 
-import torch
-import pandas as pd
-from huggingface_hub import list_models
-from datasets import Dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from tqdm import tqdm
 import matplotlib.pyplot as plt
-from transformers import PreTrainedModel
+import pandas as pd
+import torch
+from bergson.config import DataConfig
+from bergson.utils.worker_utils import setup_data_pipeline
+from datasets import Dataset
+from huggingface_hub import list_models
 from torch.utils.data import DataLoader
+from tqdm import tqdm
+from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel
 
 from unlearn.utils.utils import assert_type
-from bergson.utils.worker_utils import setup_data_pipeline
-from bergson.config import DataConfig
-
 
 # Configuration
 ORG_NAME = "open-unlearning"
@@ -162,9 +160,7 @@ def analyze(model: PreTrainedModel, dataset: Dataset, batch_size: int):
     avg_accuracy = total_accuracy / count_samples
 
     if total_hidden_norms is not None:
-        avg_hidden_norms = [
-            s / total_valid_tokens for s in total_hidden_norms
-        ]
+        avg_hidden_norms = [s / total_valid_tokens for s in total_hidden_norms]
     else:
         avg_hidden_norms = []
 
@@ -242,7 +238,9 @@ def main():
     device = "cuda"
     output_file = Path(f"analysis/results/unlearning/{args.run_name}.csv")
     model_ids_file = Path(f"analysis/results/unlearning/{args.run_name}.json")
-    norms_plot_file = Path(f"analysis/results/unlearning/{args.run_name}_unlearning_norms.png")
+    norms_plot_file = Path(
+        f"analysis/results/unlearning/{args.run_name}_unlearning_norms.png"
+    )
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     data_config = DataConfig(
