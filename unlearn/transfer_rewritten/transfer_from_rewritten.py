@@ -33,7 +33,7 @@ from transformers import (
 )
 
 from unlearn.evaluation.eval_callback import EvalCallback
-from unlearn.hook import ActivationCapture
+from unlearn.utils.hook import ActivationCapture
 from unlearn.transfer_rewritten.muon import MuonAdamW
 from unlearn.transfer_rewritten.token_alignment import (
     AlignmentStrategy,
@@ -590,7 +590,7 @@ def main(args):
 
     training_args = TrainingArguments(
         run_name=args.wandb_run_name,
-        output_dir=output_dir,
+        output_dir=str(output_dir),
         per_device_train_batch_size=args.micro_batch_size,
         gradient_accumulation_steps=args.grad_accumulation,
         num_train_epochs=args.num_phases,

@@ -7,7 +7,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 import torch
-from bergson.config import DataConfig
+from bergson.config import DataConfig, IndexConfig
 from bergson.utils.worker_utils import setup_data_pipeline
 from datasets import Dataset
 from huggingface_hub import list_models
@@ -16,6 +16,7 @@ from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel
 
 from unlearn.utils.utils import assert_type
+
 
 # Configuration
 ORG_NAME = "open-unlearning"
@@ -234,6 +235,7 @@ def main():
     parser = ArgumentParser()
     parser.add_argument("--run_name", type=str, default="tofu_unlearning_models")
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--batch_size", type=int, default=32)
     args = parser.parse_args()
 
     device = "cuda"
@@ -245,7 +247,6 @@ def main():
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     data_config = DataConfig(
-        model=BASE_MODEL,
         dataset=DATASET_NAME,
         subset=FORGET_SPLIT_TAG,
         split=SPLIT,
@@ -254,10 +255,13 @@ def main():
         completion_column="answer",
         conversation_column="",
         truncation=True,
-        max_length=512,
-        batch_size=32,
     )
-    ds = setup_data_pipeline(data_config)
+    index_config = IndexConfig(
+        model=BASE_MODEL,
+        data=data_config,
+        token_batch_size=512,
+    )
+    ds = setup_data_pipeline(index_config)
     ds = assert_type(Dataset, ds)
     ds.set_format(type="torch", columns=["input_ids", "labels"])
 
@@ -286,7 +290,7 @@ def main():
                 ds,
                 model_name,
                 const_data,
-                batch_size=data_config.batch_size,
+                batch_size=args.batch_size,
                 device=device,
             )
             results.append(model_data)
@@ -308,7 +312,7 @@ def main():
             print("found", algorithm, "continuing")
 
         df_algorithm = df[df["Algorithm"] == algorithm]
-        norms = df_algorithm["Hidden State Norms"].iloc[0]
+        norms = df_algorithm["Hidden State Norms"].iloc[0]  # type: ignore
         if isinstance(norms, str):
             # Convert string to list
             norms = ast.literal_eval(norms)

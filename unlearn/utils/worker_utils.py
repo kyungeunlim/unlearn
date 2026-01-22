@@ -33,7 +33,7 @@ def get_model_and_tokenizer(model_name, revision="main", dm="auto"):
             use_cache=False,
             device_map=None,
         )
-        model = model.to(device)
+        model = model.to(device)  # type: ignore
     else:
         model = AutoModelForCausalLM.from_pretrained(
             model_name, revision=revision, device_map=dm, use_cache=False

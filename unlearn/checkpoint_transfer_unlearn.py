@@ -2,26 +2,17 @@ import argparse
 import csv
 import gc
 import os
-from typing import Any, Callable, List, Tuple, Union
+from typing import cast
 
 import torch
 import torch.nn.functional as F
-from datasets import concatenate_datasets, load_dataset
 from peft import LoraConfig, get_peft_model
-from torch import nn
-from torch.utils.data import DataLoader, Dataset
-from transformers import AutoModelForCausalLM, Trainer, TrainingArguments
+from torch.utils.data import DataLoader
+from transformers import AutoModelForCausalLM, Trainer, TrainingArguments, PreTrainedModel
 from transformers.modeling_utils import unwrap_model
 from transformers.trainer_utils import seed_worker
 
-from unlearn.cas.utils import (
-    BIO_CORRUPT_REWRITTEN_DS_NAME,
-    BIO_CORRUPT_SHUFFLED_DS_NAME,
-    RETAIN_TEXT_DS_NAME,
-    cb_tokenize_function,
-    hf_token,
-    wikitext_tokenize_function,
-)
+from unlearn.utils.unlearning_dataset import get_unlearning_dataset
 from unlearn.online_affine_fitter import train_affine_transform
 
 
@@ -30,110 +21,6 @@ def unwrap_model(model):
     if hasattr(model, "module"):
         return model.module
     return model
-
-
-class UnlearningDataset(Dataset):
-    def __init__(self, tokenized_bio_remove_dataset, interleaved_dataset):
-        self.tokenized_bio_remove_dataset = tokenized_bio_remove_dataset
-        self.interleaved_dataset = interleaved_dataset
-
-    def __len__(self):
-        return len(self.interleaved_dataset["input_ids"])
-
-    def __getitem__(self, idx):
-        return {
-            "bio_remove_input_ids": self.tokenized_bio_remove_dataset["input_ids"][idx],
-            "bio_remove_attention_mask": self.tokenized_bio_remove_dataset[
-                "attention_mask"
-            ][idx],
-            "input_ids": self.interleaved_dataset["input_ids"][idx],
-            "attention_mask": self.interleaved_dataset["attention_mask"][idx],
-        }
-
-
-class CustomHook(nn.Module):
-    def __init__(self, module, hook_fn):
-        super().__init__()
-        self.module = module
-        self.hook_fn = hook_fn
-        self.enabled = True
-
-    def forward(self, *args, **kwargs):
-        if self.enabled:
-            return self.hook_fn(self.module(*args, **kwargs))
-        else:
-            return self.module(*args, **kwargs)
-
-
-def _remove_hook(parent, target):
-    for name, module in parent.named_children():
-        if name == target:
-            setattr(parent, name, module.module)
-            return
-
-
-def insert_hook(parent, target, hook_fn):
-    hook = None
-    for name, module in parent.named_children():
-        if name == target and hook is None:
-            hook = CustomHook(module, hook_fn)
-            setattr(parent, name, hook)
-        elif name == target and hook is not None:
-            _remove_hook(parent, target)
-            raise ValueError(
-                f"Multiple modules with name {target} found, removed hooks"
-            )
-
-    if hook is None:
-        raise ValueError(f"No module with name {target} found")
-
-    return hook
-
-
-def remove_hook(parent, target):
-    is_removed = False
-    for name, module in parent.named_children():
-        if name == target and isinstance(module, CustomHook):
-            setattr(parent, name, module.module)
-            is_removed = True
-        elif name == target and not isinstance(module, CustomHook):
-            raise ValueError(f"Module {target} is not a hook")
-        elif name == target:
-            raise ValueError(f"FATAL: Multiple modules with name {target} found")
-
-    if not is_removed:
-        raise ValueError(f"No module with name {target} found")
-
-
-def clear_hooks(model):
-    for name, module in model.named_children():
-        if isinstance(module, CustomHook):
-            setattr(model, name, module.module)
-            clear_hooks(module.module)
-        else:
-            clear_hooks(module)
-    # Optimization: Removing empty_cache here allows smoother
-    # transitions between epochs/calls
-    # torch.cuda.empty_cache()
-
-
-def add_hooks(
-    model: torch.nn.Module,
-    create_adversary: Callable[[Union[Tuple[int, str], Tuple[str, str]]], Any],
-    adversary_locations: Union[List[Tuple[int, str]], List[Tuple[str, str]]],
-):
-    adversaries = []
-    hooks = []
-
-    if len(adversary_locations) == 0:
-        raise ValueError("No hook points provided")
-
-    for layer, subcomponent in adversary_locations:
-        parent = model.get_submodule(layer)
-        adversaries.append(create_adversary((layer, subcomponent)))
-        hooks.append(insert_hook(parent, subcomponent, adversaries[-1]))
-
-    return adversaries, hooks
 
 
 class UnlearningTrainer(Trainer):
@@ -445,35 +332,6 @@ class RRTrainer(UnlearningTrainer):
                 denom + 1e-6
             )
 
-        if self.run_args.alg == "rr-lat":
-            num_attack = 2
-            cb_inputs_dict_lat = dict(
-                input_ids=circuit_breaker_input_ids[:num_attack],
-                attention_mask=circuit_breaker_attention_mask[:num_attack],
-                labels=circuit_breaker_input_ids[:num_attack],
-            )
-            mlm = (
-                "model.gpt_neox.layers"
-                if "Unlearning" in self.run_args.model_name
-                else "model.layers"
-            )
-            if self.run_args.lora and "Unlearning" in self.run_args.model_name:
-                mlm = "base_model." + mlm
-            elif self.run_args.lora:
-                mlm = "base_model.model." + mlm
-
-            losses, wrappers = gradient_descent_attack(
-                batch=cb_inputs_dict_lat,
-                model=unwrapped_model,
-                model_layers_module=mlm,
-                layers=["embedding"] + self.run_args.layers,
-                learning_rate=self.run_args.adv_lr,
-                iterations=self.run_args.attack_iters,
-                device=target_device,
-                hidden_dim=self.run_args.hidden_dim,
-            )
-            clear_hooks(unwrapped_model)
-
         # ========================================================================
         # Total Loss
         # ========================================================================
@@ -592,19 +450,9 @@ if __name__ == "__main__":
         args.model_name in SUPPORTED_MODELS
     ), f"model_name must be one of {SUPPORTED_MODELS}, got {args.model_name}"
 
-    if args.alg == "rr":
-        args.pdbs = 4 if args.pdbs is None else args.pdbs
-        args.retain_coef = 5 if args.retain_coef is None else args.retain_coef
-        args.remove_coef = 5 if args.remove_coef is None else args.remove_coef
-    elif args.alg == "rr-lat":
-        args.pdbs = 1 if args.pdbs is None else args.pdbs
-        args.retain_coef = 5 if args.retain_coef is None else args.retain_coef
-        args.remove_coef = 5 if args.remove_coef is None else args.remove_coef
-    else:
-        args.pdbs = 1 if args.pdbs is None else args.pdbs
-        args.retain_coef = 1 if args.retain_coef is None else args.retain_coef
-        args.remove_coef = 5 if args.remove_coef is None else args.remove_coef
-
+    args.pdbs = 4 if args.pdbs is None else args.pdbs
+    args.retain_coef = 5 if args.retain_coef is None else args.retain_coef
+    args.remove_coef = 5 if args.remove_coef is None else args.remove_coef
     args.hidden_dim = 4096
 
     print("Parsed arguments:")
@@ -613,61 +461,7 @@ if __name__ == "__main__":
     print()
 
     model, tokenizer = get_model_and_tokenizer(args.model_name, revision=args.revision)
-
-    # Load retain_examples
-    retain_text_dataset = load_dataset(RETAIN_TEXT_DS_NAME, "wikitext-103-raw-v1")[
-        "train"
-    ]
-    retain_text_dataset = retain_text_dataset.rename_column("page", "text")
-    retain_text_dataset = retain_text_dataset.shuffle(seed=42).select(
-        range(int(args.num_train_examples))
-    )
-    tokenized_retain_text_dataset = retain_text_dataset.map(
-        lambda x: wikitext_tokenize_function(x, tokenizer),
-        batched=True,
-        num_proc=NUM_PROC,
-    )
-
-    retain_datasets = [tokenized_retain_text_dataset]
-    retain_datasets = [
-        concatenate_datasets(retain_datasets)
-        .shuffle(seed=42)
-        .select(range(args.num_train_examples))
-    ]
-
-    num_remove_to_take = (
-        args.num_train_examples
-        if not args.unlearn_corrupt
-        else int(args.num_train_examples * (1 + args.corrupt_ratio))
-    )
-    bio_remove_dataset = load_dataset("cais/wmdp-bio-forget-corpus", token=hf_token)
-    bio_remove_dataset = bio_remove_dataset["train"].select(range(num_remove_to_take))
-    tokenized_remove_dataset = bio_remove_dataset.map(
-        lambda x: cb_tokenize_function(x, tokenizer), batched=True, num_proc=NUM_PROC
-    )
-    remove_datasets = [tokenized_remove_dataset]
-    if args.unlearn_corrupt:
-        corrupt_dataset = (
-            load_dataset(BIO_CORRUPT_REWRITTEN_DS_NAME, token=hf_token)
-            if args.corrupt_ds == "rewritten"
-            else load_dataset(BIO_CORRUPT_SHUFFLED_DS_NAME, token=hf_token)
-        )
-        corrupt_dataset = corrupt_dataset["train"].select(
-            range(
-                args.num_train_examples,
-                int(args.num_train_examples * args.corrupt_ratio),
-            )
-        )
-        tokenized_corrupt_dataset = corrupt_dataset.map(
-            lambda x: cb_tokenize_function(x, tokenizer),
-            batched=True,
-            num_proc=NUM_PROC,
-        )
-        retain_datasets.append(tokenized_corrupt_dataset)
-
-    all_retain_datasets = concatenate_datasets(retain_datasets)
-    all_remove_datasets = concatenate_datasets(remove_datasets)
-    train_dataset = UnlearningDataset(all_remove_datasets, all_retain_datasets)
+    train_dataset = get_unlearning_dataset(args, tokenizer, NUM_PROC)
 
     lora_layers_to_transform = [i for i in range(max(args.layers) + 1)]
 
@@ -701,6 +495,7 @@ if __name__ == "__main__":
         )
 
         model = get_peft_model(model, lora_config)
+    model = cast(PreTrainedModel, model)
     model.enable_input_require_grads()
 
     # Load checkpoint model for checkpoint activation transfer
@@ -725,7 +520,6 @@ if __name__ == "__main__":
         affine_transforms = train_affine_transform(
             source_model=checkpoint_model,
             target_model=model,
-            tokenizer=tokenizer,
             dataset=train_dataset,
             target_layers=args.layers,
             num_examples=args.affine_num_examples,
@@ -775,24 +569,6 @@ if __name__ == "__main__":
 
     model.train()
     trainer.train()
-    clear_hooks(model)
-
-    # Final Evaluation (retained, as this measures the resulting model)
-    # mmlu_acc = lm_eval_model(
-    #     model, task='mmlu', limit=args.mmlu_agieval_limit,
-    #     revision=args.revision, tokenizer=tokenizer
-    # )
-    # if 'smollm2' not in args.model_name:
-    #     wmdp_acc = lm_eval_model(
-    #         model, task='wmdp_bio_robust', limit=args.wmdp_eval_limit,
-    #         revision=args.revision, tokenizer=tokenizer
-    #     )
-    #     print(f'***\nFinal wmdp_acc: {wmdp_acc}, mmlu_acc {mmlu_acc}\n***')
-    # else:
-    #     jailbreak_score = jailbreak_eval_model(
-    #         model, tokenizer, num_examples=500, pfx=None, num_fs=0
-    #     )
-    #     print(f'***\nFinal jailbreak: {jailbreak_score}, mmlu {mmlu_acc}\n***')
 
     if args.lora:
         model = model.merge_and_unload()

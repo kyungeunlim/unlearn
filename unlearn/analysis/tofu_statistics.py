@@ -311,7 +311,7 @@ def main():
             print("found", algorithm, "continuing")
 
         df_algorithm = df[df["Algorithm"] == algorithm]
-        norms = df_algorithm["Hidden State Norms"].iloc[0]
+        norms = df_algorithm["Hidden State Norms"].iloc[0]  # type: ignore
         if isinstance(norms, str):
             # Convert string to list
             norms = ast.literal_eval(norms)

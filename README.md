@@ -27,8 +27,8 @@ use /ide to connect to the IDE if disconnected.
 ### Evaluation
 
 ```bash
-python scripts/eval_wmdp_robust.py --model_path ./out/DeepIgnorance_CB --batch_size 8
-python scripts/eval_mmlu_stem.py --model_path ./out/DeepIgnorance_CB --batch_size 8
+python -m unlearn.evaluation.eval_wmdp_robust --model_path ./out/DeepIgnorance_CB --batch_size 8 --include_path unlearn/lm_eval_tasks
+python -m unlearn.evaluation.eval_mmlu_stem --model_path ./out/DeepIgnorance_CB --batch_size 8
 ```
 
 ### Circuit Breakers

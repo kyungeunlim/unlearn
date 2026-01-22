@@ -118,7 +118,7 @@ class MuonAdamWLens(torch.optim.Optimizer):
 
         super().__init__(self.param_groups, {})
 
-    def step(self, closure=None):
+    def step(self, closure=None): # type: ignore
         loss = None
         if closure is not None:
             loss = closure()
@@ -177,7 +177,7 @@ def prepare_bio_dataset(
     ds = ds.map(
         tokenize_fn,
         batched=True,
-        remove_columns=ds.column_names,
+        remove_columns=list(ds.column_names),
         desc="Tokenizing bio dataset",
         load_from_cache_file=True,  # Important for DDP so processes share cache
     )
@@ -231,7 +231,7 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
                 name=run_name,
                 config=asdict(train_cfg),
             )
-            print(f"Wandb run: {wandb.run.url}")
+            print(f"Wandb run: {wandb.run.url}")  # type: ignore
     else:
         # Suppress printing on other ranks
         sys.stdout = open(os.devnull, "w")
@@ -300,7 +300,7 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
         )
 
     sampler = DistributedSampler(
-        dataset,
+        dataset, # type: ignore
         num_replicas=world_size,
         rank=global_rank,
         shuffle=True,
@@ -308,7 +308,7 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
     )
 
     dataloader = DataLoader(
-        dataset,
+        dataset, # type: ignore
         batch_size=train_cfg.batch_size,
         shuffle=False,
         sampler=sampler,
@@ -317,7 +317,7 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
     )
 
     if is_main_process:
-        print(f"Total dataset size: {len(dataset)}")
+        print(f"Total dataset size: {len(dataset)}")  # type: ignore
         eff_batch = (
             train_cfg.batch_size * world_size * train_cfg.gradient_accumulation_steps
         )
@@ -408,7 +408,7 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
                 avg_accum_loss = total_loss / train_cfg.gradient_accumulation_steps
 
                 if is_main_process:
-                    pbar.set_postfix(
+                    pbar.set_postfix( # type: ignore
                         {"loss": f"{avg_accum_loss:.4f}", "step": global_step}
                     )
 

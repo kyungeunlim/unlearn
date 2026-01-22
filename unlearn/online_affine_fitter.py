@@ -82,7 +82,6 @@ class OnlineAffineFitter:
 def train_affine_transform(
     source_model,
     target_model,
-    tokenizer,
     dataset,
     target_layers,
     num_examples=100_000,
@@ -176,10 +175,6 @@ def train_affine_transform(
                 clean_tgt = flat_tgt[mask]
 
                 fitters[layer_idx].update(clean_src, clean_tgt)
-
-            # Cleanup
-            del out_source, out_target, inputs
-            torch.cuda.empty_cache()
 
     # 4. Solve
     print("📐 Solving Linear Systems...")

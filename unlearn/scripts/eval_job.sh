@@ -14,7 +14,7 @@ accelerate launch --num_processes=4 -m lm_eval \
     --output_path ${RESULTS_PATH} \
     --include_path ${INCLUDE_PATH}
 
-python -m unlearn.log_eval_to_wandb \
+python -m unlearn.evaluation.log_eval_to_wandb \
     --results ${RESULTS_PATH} \
     --step ${STEP} \
     --wandb_run_id ${WANDB_RUN_ID} \

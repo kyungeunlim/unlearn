@@ -11,7 +11,32 @@ from datasets import concatenate_datasets, load_dataset
 from peft import LoraConfig, get_peft_model
 from transformers import Trainer, TrainerCallback, TrainingArguments
 
-from unlearn.cas.utils import *
+from unlearn.reference.cas.utils import (
+    wikitext_tokenize_function,
+    refusal_compliance_tokenize_function,
+    incompetent_compliance_tokenize_function,
+    cb_tokenize_function,
+    cb_retain_tokenize_function,
+    RETAIN_CHAT_DS_NAME,
+    RETAIN_TEXT_DS_NAME,
+    RETAIN_REFUSAL_COMPLIANCE_DS_NAME,
+    RETAIN_INCOMPETENT_COMPLIANCE_DS_NAME,
+    BIO_RETAIN_DS_NAME,
+    BIO_REMOVE_DS_NAME,
+    BIO_CORRUPT_REWRITTEN_DS_NAME,
+    BIO_CORRUPT_SHUFFLED_DS_NAME,
+    BIO_CORRUPT_DEEPFRIED_DS_NAME,
+    ultrachat_tokenize_function,
+    MAX_LENGTH,
+    hf_token,
+    lm_eval_model,
+    jailbreak_eval_model
+)
+from unlearn.utils.worker_utils import get_model_and_tokenizer
+
+# Not sure what this is supposed to be
+BIO_FILTERED_DOCS_DS_NAME = None
+ 
 
 
 class WMDPEvalCallback(TrainerCallback):
@@ -42,13 +67,15 @@ class WMDPEvalCallback(TrainerCallback):
                 "wmdp_bio_aisi_cloze_verified",
                 "wmdp_bio_retrieval",
             ]
-            harness_results = lm_eval_model_multi_task(
-                self.model,
-                tasks=eval_tasks,
-                revision=self.run_args.revision,
-                tokenizer=self.tokenizer,
-                limit=self.run_args.wmdp_eval_limit,
-            )
+            harness_results = {}
+            for task in eval_tasks:
+                harness_results[task] = lm_eval_model(
+                    self.model,
+                    tasks=task, # type: ignore
+                    revision=self.run_args.revision,
+                    tokenizer=self.tokenizer,
+                    limit=self.run_args.wmdp_eval_limit,
+                )
 
             eval_results = {}
             for task_name in harness_results["results"]:
@@ -117,7 +144,7 @@ class LogSpaceCheckpointCallback(TrainerCallback):
 
         print(f"Will save checkpoints at log-spaced steps: {sorted(self.log_steps)}")
 
-    def on_step_end(self, args, state, control, **kwargs):
+    def on_step_end(self, args, state, control, **kwargs): # type: ignore
         """Trigger saves at log-spaced intervals."""
         step = state.global_step
 
@@ -243,7 +270,7 @@ if __name__ == "__main__":
             reinit=True,
         )
         # Disable parameter/gradient watching to reduce overhead
-        wandb.watch(models=None, log=None)
+        wandb.watch(models=None, log=None)  # type: ignore
     except Exception as e:
         print(f"[W&B] init failed, proceeding without active run: {e}")
 
@@ -353,7 +380,7 @@ if __name__ == "__main__":
 
     if args.include_bio_filtered_docs:
         bio_filtered_docs_dataset = load_dataset(
-            BIO_FILTERED_DOCS_DS_NAME, token=hf_token
+            BIO_FILTERED_DOCS_DS_NAME, token=hf_token # type: ignore
         )
         bio_filtered_docs_dataset = (
             bio_filtered_docs_dataset["train"]
@@ -570,12 +597,12 @@ if __name__ == "__main__":
     #     print(f'***\nCustom bio eval acc: {custom_eval_acc}\n***')
 
     if args.lora:
-        model = model.merge_and_unload()
+        model = model.merge_and_unload()  # type: ignore
 
     # Save checkpoint if requested
     if args.save_checkpoint and checkpoint_dir:
         print(f"Saving final checkpoint to {checkpoint_dir}...")
-        model.save_pretrained(checkpoint_dir)
+        model.save_pretrained(checkpoint_dir)  # type: ignore
         tokenizer.save_pretrained(checkpoint_dir)
         print("Checkpoint saved successfully!")
 
