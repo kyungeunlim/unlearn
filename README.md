@@ -1,3 +1,11 @@
+# Development
+
+```bash
+pip install -e ".[dev]"
+pre-commit install
+pytest
+```
+
 ### Historical Code
 
 This repository contains historical code from the Deep Ignorance project that may be useful for unlearning analysis. Other artifacts from this project are available at https://github.com/EleutherAI/deep-ignorance and https://github.com/EleutherAI/filtering_for_danger.
