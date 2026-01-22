@@ -1,3 +1,5 @@
+import os
+
 import torch
 from bergson.config import IndexConfig
 from bergson.data import load_data_string, tokenize
@@ -9,6 +11,48 @@ from datasets import (
 from peft import PeftConfig, PeftModel, get_peft_model_state_dict
 from torch.distributed.fsdp import fully_shard
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+
+def unwrap_model(model):
+    """Get the underlying model from DDP/FSDP wrapper if present."""
+    if hasattr(model, "module"):
+        return model.module
+    return model
+
+
+def get_model_and_tokenizer(model_name, revision="main", dm="auto"):
+    # Check if running in distributed mode (accelerate/torchrun sets LOCAL_RANK)
+    local_rank = os.environ.get("LOCAL_RANK")
+
+    if local_rank is not None:
+        device = f"cuda:{local_rank}"
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            revision=revision,
+            torch_dtype=torch.bfloat16,
+            use_cache=False,
+            device_map=None,
+        )
+        model = model.to(device)
+    else:
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name, revision=revision, device_map=dm, use_cache=False
+        )
+
+    tokenizer = AutoTokenizer.from_pretrained(model_name, revision=revision)
+    if "Unlearning" in model_name:
+        tokenizer.add_special_tokens(
+            {
+                "pad_token": "<|padding|>",
+                "eos_token": "<|endoftext|>",
+                "bos_token": "<|startoftext|>",
+            }
+        )
+        tokenizer.padding_side = "left"
+    else:
+        tokenizer.pad_token = tokenizer.eos_token or tokenizer.unk_token
+
+    return model, tokenizer
 
 
 def setup_model_and_peft(

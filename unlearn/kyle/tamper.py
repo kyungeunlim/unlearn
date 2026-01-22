@@ -517,7 +517,7 @@ if __name__ == "__main__":
         gradient_checkpointing=False,  # to avoid oom errors
         fp16=True,  # to avoid oom errors,
         save_strategy="steps",  # Enable step-based saving controlled by callback
-        save_steps=10000,  # Large value - actual saves controlled by LogSpaceCheckpointCallback
+        save_steps=10000,  # Large value, saves controlled by LogSpaceCheckpoint
         save_only_model=True,  # Only save model weights (saves space)
         warmup_steps=args.lr_warmup,  # Warmup steps for learning rate scheduler
         logging_strategy="steps",  # Enable logging during training
@@ -543,7 +543,10 @@ if __name__ == "__main__":
     if args.eval_every > 0:
         print(f"***\nWMDP eval performance over time: {callbacks[0].eval_results}\n***")
 
-    # mmlu_acc = lm_eval_model(model, task='mmlu', limit=args.mmlu_agieval_limit, revision=args.revision, tokenizer=tokenizer)
+    # mmlu_acc = lm_eval_model(
+    #     model, task='mmlu', limit=args.mmlu_agieval_limit,
+    #     revision=args.revision, tokenizer=tokenizer
+    # )
 
     if "smollm2" not in args.model_name and args.eval_every < 0:
         wmdp_acc = lm_eval_model(

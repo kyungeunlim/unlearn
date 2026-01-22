@@ -112,7 +112,8 @@ def clear_hooks(model):
             clear_hooks(module.module)
         else:
             clear_hooks(module)
-    # Optimization: Removing empty_cache here allows smoother transitions between epochs/calls
+    # Optimization: Removing empty_cache here allows smoother
+    # transitions between epochs/calls
     # torch.cuda.empty_cache()
 
 
@@ -492,7 +493,9 @@ class RRTrainer(UnlearningTrainer):
             loss_val = loss.item() if isinstance(loss, torch.Tensor) else loss
 
             print(
-                f"\nStep {self.current_training_step}: retain_coeff: {retain_coeff:.4f} || cb_coeff: {circuit_breaker_coeff:.4f}"
+                f"\nStep {self.current_training_step}: "
+                f"retain_coeff: {retain_coeff:.4f} || "
+                f"cb_coeff: {circuit_breaker_coeff:.4f}"
             )
             print(
                 f"retain_kl_loss: {retain_loss_val:.4f} || cb_loss: {cb_loss_val:.4f}"
@@ -741,7 +744,8 @@ if __name__ == "__main__":
     grad_acc_steps = max(1, global_batch_size // (args.pdbs * world_size))
 
     print(
-        f"Running with {world_size} GPUs. Per device batch: {args.pdbs}. Grad Acc steps: {grad_acc_steps}."
+        f"Running with {world_size} GPUs. Per device batch: {args.pdbs}. "
+        f"Grad Acc steps: {grad_acc_steps}."
     )
 
     training_args = TrainingArguments(
@@ -774,13 +778,21 @@ if __name__ == "__main__":
     clear_hooks(model)
 
     # Final Evaluation (retained, as this measures the resulting model)
-    # mmlu_acc = lm_eval_model(model, task='mmlu', limit=args.mmlu_agieval_limit, revision=args.revision, tokenizer=tokenizer)
+    # mmlu_acc = lm_eval_model(
+    #     model, task='mmlu', limit=args.mmlu_agieval_limit,
+    #     revision=args.revision, tokenizer=tokenizer
+    # )
     # if 'smollm2' not in args.model_name:
-    #     wmdp_acc = lm_eval_model(model, task='wmdp_bio_robust', limit=args.wmdp_eval_limit, revision=args.revision, tokenizer=tokenizer)
-    #     print(f'***\nFinal wmdp_acc: {wmdp_acc}, final mmlu_acc {mmlu_acc}\n***')
+    #     wmdp_acc = lm_eval_model(
+    #         model, task='wmdp_bio_robust', limit=args.wmdp_eval_limit,
+    #         revision=args.revision, tokenizer=tokenizer
+    #     )
+    #     print(f'***\nFinal wmdp_acc: {wmdp_acc}, mmlu_acc {mmlu_acc}\n***')
     # else:
-    #     jailbreak_score = jailbreak_eval_model(model, tokenizer, num_examples=500, pfx=None, num_fs=0)
-    #     print(f'***\nFinal jailbreak_score: {jailbreak_score}, final mmlu_acc {mmlu_acc}\n***')
+    #     jailbreak_score = jailbreak_eval_model(
+    #         model, tokenizer, num_examples=500, pfx=None, num_fs=0
+    #     )
+    #     print(f'***\nFinal jailbreak: {jailbreak_score}, mmlu {mmlu_acc}\n***')
 
     if args.lora:
         model = model.merge_and_unload()

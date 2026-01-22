@@ -5,7 +5,9 @@ from utils import *
 
 def eval_lab_bench(model, tokenizer):
 
-    # model, tokenizer = get_model_and_tokenizer('Unlearning/pythia1.5_baseline', revision='annealing_step_11921')
+    # model, tokenizer = get_model_and_tokenizer(
+    #     'Unlearning/pythia1.5_baseline', revision='annealing_step_11921'
+    # )
 
     litqa2 = load_dataset("futurehouse/lab-bench", "LitQA2")
     protocolqa = load_dataset("futurehouse/lab-bench", "ProtocolQA")
@@ -14,7 +16,11 @@ def eval_lab_bench(model, tokenizer):
         distractors.insert("ACBD".index(answer), ideal)
         if len(distractors) != 4:
             return None, None
-        question = f"PASSAGE:\n{passage}\n\nQUESTION:\nA: {distractors[0]}\nB: {distractors[1]}\nC: {distractors[2]}\nD: {distractors[3]}\nAnswer:"
+        question = (
+            f"PASSAGE:\n{passage}\n\nQUESTION:\n"
+            f"A: {distractors[0]}\nB: {distractors[1]}\n"
+            f"C: {distractors[2]}\nD: {distractors[3]}\nAnswer:"
+        )
         return question, answer
 
     litqa_questions, litqa_answers, protocolqa_questions, protocolqa_answers = (
@@ -90,7 +96,9 @@ if __name__ == "__main__":
     print()
 
     model, tokenizer = get_model_and_tokenizer(args.model_name, revision=args.revision)
-    # model, tokenizer = get_model_and_tokenizer('Unlearning/pythia1.5_baseline', revision='annealing_step_11921')
+    # model, tokenizer = get_model_and_tokenizer(
+    #     'Unlearning/pythia1.5_baseline', revision='annealing_step_11921'
+    # )
 
     for eval in args.evals:
         if eval == "lab_bench":
@@ -107,7 +115,9 @@ if __name__ == "__main__":
                 revision=args.revision,
                 system_instruction=args.system_instruction,
             )
-            # performance = lm_eval_model(model, task=eval, tokenizer=tokenizer, revision='annealing_step_11921')
+            # performance = lm_eval_model(
+            #     model, task=eval, tokenizer=tokenizer, revision='annealing_step_11921'
+            # )
             print(f"***\n{eval} performance: {performance}\n***")
 
 # from utils import *

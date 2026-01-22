@@ -1,4 +1,5 @@
-# A base script for prototyping unlearning methods. Uses Cas's circuit breakers implementation with DDP enabled.
+# A base script for prototyping unlearning methods.
+# Uses Cas's circuit breakers implementation with DDP enabled.
 
 import argparse
 import os
@@ -9,7 +10,7 @@ from datasets import concatenate_datasets, load_dataset
 from peft import LoraConfig, get_peft_model
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
+from transformers import Trainer, TrainingArguments
 from transformers.modeling_utils import unwrap_model
 from transformers.trainer_utils import seed_worker
 
@@ -30,52 +31,7 @@ from unlearn.cas.utils import (
     refusal_compliance_tokenize_function,
     wikitext_tokenize_function,
 )
-
-
-def unwrap_model(model):
-    """Get the underlying model from DDP/FSDP wrapper if present."""
-    if hasattr(model, "module"):
-        return model.module
-    return model
-
-
-def get_model_and_tokenizer(model_name, revision="main", dm="auto"):
-    # Check if running in distributed mode (accelerate/torchrun sets LOCAL_RANK)
-    local_rank = os.environ.get("LOCAL_RANK")
-
-    if local_rank is not None:
-        # DDP Mode: We must NOT use device_map="auto" because DDP replicates the model.
-        # We map the model strictly to the current process's GPU.
-        print(f"DDP detected: mapping model to cuda:{local_rank}")
-        device = f"cuda:{local_rank}"
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            revision=revision,
-            torch_dtype=torch.bfloat16,
-            use_cache=False,
-            device_map=None,  # Important: Disable auto map for DDP
-        )
-        model = model.to(device)
-    else:
-        # Single Process / Model Parallel: Use the requested device map (usually 'auto')
-        print(f"Single process detected: using device_map='{dm}'")
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name, revision=revision, device_map=dm, use_cache=False
-        )
-
-    tokenizer = AutoTokenizer.from_pretrained(model_name, revision=revision)
-    if "Unlearning" in model_name:
-        tokenizer.add_special_tokens(
-            {
-                "pad_token": "<|padding|>",
-                "eos_token": "<|endoftext|>",
-                "bos_token": "<|startoftext|>",
-            }
-        )
-        tokenizer.padding_side = "left"
-    else:
-        tokenizer.pad_token = tokenizer.eos_token or tokenizer.unk_token
-    return model, tokenizer
+from unlearn.utils.worker_utils import get_model_and_tokenizer, unwrap_model
 
 
 class UnlearningDataset(Dataset):
@@ -236,8 +192,9 @@ class RRTrainer(UnlearningTrainer):
         self, model, inputs, return_outputs=False, num_items_in_batch=None
     ):
         # 1. SAFELY UNWRAP MODEL
-        # This works for both DDP (returns inner model) and Single GPU (returns model as-is).
-        # We need this to access .disable_adapter() and specific layers.
+        # This works for both DDP (returns inner model) and Single GPU
+        # (returns model as-is). We need this to access .disable_adapter()
+        # and specific layers.
         unwrapped_model = unwrap_model(model)
 
         # Determine device from inputs (safest way in DDP)
@@ -252,9 +209,7 @@ class RRTrainer(UnlearningTrainer):
         retain_input_ids = inputs.get("input_ids").to(target_device)
         retain_attention_mask = inputs.get("attention_mask").to(target_device)
         # ==== cb ====
-        circuit_breaker_input_ids = inputs.get("bio_remove_input_ids").to(
-            target_device
-        )
+        circuit_breaker_input_ids = inputs.get("bio_remove_input_ids").to(target_device)
         circuit_breaker_attention_mask = inputs.get("bio_remove_attention_mask").to(
             target_device
         )
@@ -293,7 +248,8 @@ class RRTrainer(UnlearningTrainer):
         broadcast_retain_mask = retain_attention_mask.unsqueeze(0).unsqueeze(-1)
         broadcast_cb_mask = circuit_breaker_attention_mask.unsqueeze(0).unsqueeze(-1)
 
-        # Use unwrapped_model for context manager (DDP wrapper doesn't have disable_adapter)
+        # Use unwrapped_model for context manager
+        # (DDP wrapper doesn't have disable_adapter)
         with unwrapped_model.disable_adapter():
             unwrapped_model.eval()
             with torch.no_grad():
@@ -319,11 +275,12 @@ class RRTrainer(UnlearningTrainer):
 
         ### Retain control
         if retain_coeff > 0:
-            # We use unwrapped_model here because we are accessing specific hidden states.
-            # DDP usually requires using 'model' to sync gradients, but since we are
-            # effectively doing a manual loss calculation on sub-components,
-            # and Accelerate/Trainer handles the backward pass sync, this is generally safe.
-            # If you see hanging, switch these forward passes to use 'model' (but you lose direct access to [module] output structure if wrapped).
+            # We use unwrapped_model here to access specific hidden states.
+            # DDP usually requires using 'model' to sync gradients, but since
+            # we are effectively doing a manual loss calculation on sub-components
+            # and Accelerate/Trainer handles the backward pass sync, this is safe.
+            # If you see hanging, switch these forward passes to use 'model'
+            # (but you lose direct access to [module] output structure if wrapped).
             lora_retain_outputs = unwrapped_model(**retain_inputs_dict)[module]
             lora_retain_hidden = (
                 torch.stack(lora_retain_outputs) * broadcast_retain_mask
@@ -374,7 +331,9 @@ class RRTrainer(UnlearningTrainer):
             and int(os.environ.get("LOCAL_RANK", 0)) == 0
         ):
             print(
-                f"retain_coeff: {retain_coeff:.4f} || cb_coeff: {circuit_breaker_coeff:.4f} || retain_loss: {retain_loss:.4f} || cb_loss: {circuit_breaker_loss:.4f}"
+                f"retain_coeff: {retain_coeff:.4f} || cb_coeff: "
+                f"{circuit_breaker_coeff:.4f} || retain_loss: {retain_loss:.4f} "
+                f"|| cb_loss: {circuit_breaker_loss:.4f}"
             )
 
         # Optimization: Moved heavy eval out of loop
@@ -580,7 +539,8 @@ if __name__ == "__main__":
     grad_acc_steps = max(1, global_batch_size // (args.pdbs * world_size))
 
     print(
-        f"Running with {world_size} GPUs. Per device batch: {args.pdbs}. Grad Acc steps: {grad_acc_steps}."
+        f"Running with {world_size} GPUs. Per device batch: {args.pdbs}. "
+        f"Grad Acc steps: {grad_acc_steps}."
     )
 
     training_args = TrainingArguments(

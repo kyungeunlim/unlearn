@@ -29,13 +29,16 @@ def _zero_mean(input: Tensor, dim: int) -> Tensor:
 def _check_shape_equal(x: Tensor, y: Tensor, dim: int):
     if x.size(dim) != y.size(dim):
         raise ValueError(
-            f"x.size({dim}) == y.size({dim}) is expected, but got {x.size(dim)=}, {y.size(dim)=} instead."
+            f"x.size({dim}) == y.size({dim}) is expected, "
+            f"but got {x.size(dim)=}, {y.size(dim)=} instead."
         )
 
 
 def cca_by_svd(x: Tensor, y: Tensor) -> tuple[Tensor, Tensor, Tensor]:
     """CCA using only SVD.
-    For more details, check Press 2011 "Canonical Correlation Clarified by Singular Value Decomposition"
+
+    For more details, check Press 2011 "Canonical Correlation Clarified
+    by Singular Value Decomposition"
 
     Args:
         x: input tensor of Shape DxH
@@ -58,7 +61,9 @@ def cca_by_svd(x: Tensor, y: Tensor) -> tuple[Tensor, Tensor, Tensor]:
 
 def cca_by_qr(x: Tensor, y: Tensor) -> tuple[Tensor, Tensor, Tensor]:
     """CCA using QR and SVD.
-    For more details, check Press 2011 "Canonical Correlation Clarified by Singular Value Decomposition"
+
+    For more details, check Press 2011 "Canonical Correlation Clarified
+    by Singular Value Decomposition"
 
     Args:
         x: input tensor of Shape DxH

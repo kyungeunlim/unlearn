@@ -32,8 +32,10 @@ def find_and_load_rmu_file(dataset_name, target_pattern):
     """Find and load a specific file from the rmu-training-data dataset.
 
     Args:
-        dataset_name: Name of the HuggingFace dataset (e.g., "Unlearning/rmu-training-data")
-        target_pattern: Pattern to match the file name (e.g., "bio-forget-corpus")
+        dataset_name: Name of the HuggingFace dataset
+            (e.g., "Unlearning/rmu-training-data")
+        target_pattern: Pattern to match the file name
+            (e.g., "bio-forget-corpus")
 
     Returns:
         Dataset loaded from the matching file
@@ -154,7 +156,8 @@ def load_datasets():
         bio_forget = Dataset.load_from_disk(bio_forget_path)
     except Exception as e:
         print(
-            f"Error loading bio-forget from {bio_forget_path}, trying to load from HuggingFace Hub... {e}"
+            f"Error loading bio-forget from {bio_forget_path}, "
+            f"trying to load from HuggingFace Hub... {e}"
         )
         bio_forget = find_and_load_rmu_file(
             "Unlearning/rmu-training-data", "bio-forget-corpus"
@@ -164,7 +167,8 @@ def load_datasets():
         rewritten = Dataset.load_from_disk(rewritten_path)
     except Exception as e:
         print(
-            f"Error loading rewritten from {rewritten_path}, trying to load from HuggingFace Hub... {e}"
+            f"Error loading rewritten from {rewritten_path}, "
+            f"trying to load from HuggingFace Hub... {e}"
         )
         rewritten = load_dataset("Unlearning/wmdp-lie-o-rewritten", split="train")
 
@@ -172,7 +176,8 @@ def load_datasets():
         retain = Dataset.load_from_disk(retain_path)
     except Exception as e:
         print(
-            f"Error loading retain from {retain_path}, trying to load from HuggingFace Hub... {e}"
+            f"Error loading retain from {retain_path}, "
+            f"trying to load from HuggingFace Hub... {e}"
         )
         retain = find_and_load_rmu_file(
             "Unlearning/rmu-training-data", "bio-retain-corpus"
@@ -192,7 +197,7 @@ def load_datasets():
 
 
 def truncate_transfer_dataset(example, max_seq_len):
-    """Process transfer dataset: truncate and add attention masks for source and target."""
+    """Truncate and add attention masks for source and target."""
     source_ids = example["source_input_ids"]
     target_ids = example["target_input_ids"]
 

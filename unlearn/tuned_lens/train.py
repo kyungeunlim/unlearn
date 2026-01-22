@@ -271,9 +271,10 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
     lens = lens.to(device=device, dtype=torch_dtype)
 
     # Wrap in DDP
-    # find_unused_parameters=True might be needed because we iterate and backward per layer,
-    # but since we touch every layer every batch, False is usually preferred for speed.
-    # However, because we do individual backward() calls per layer, DDP syncs happen per layer.
+    # find_unused_parameters=True might be needed because we iterate
+    # and backward per layer, but since we touch every layer every batch,
+    # False is usually preferred for speed. However, because we do
+    # individual backward() calls per layer, DDP syncs happen per layer.
     ddp_lens = DDP(
         lens,
         device_ids=[local_rank],
@@ -317,9 +318,10 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
 
     if is_main_process:
         print(f"Total dataset size: {len(dataset)}")
-        print(
-            f"Effective batch size: {train_cfg.batch_size * world_size * train_cfg.gradient_accumulation_steps}"
+        eff_batch = (
+            train_cfg.batch_size * world_size * train_cfg.gradient_accumulation_steps
         )
+        print(f"Effective batch size: {eff_batch}")
 
     if is_main_process:
         print("Creating MuonAdamW optimizer...")
@@ -363,8 +365,9 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
             target_log_probs = F.log_softmax(final_logits.float(), dim=-1)
 
             # --- Forward & Backward ---
-            # Note: We iterate layers. DDP will sync gradients on every .backward() call.
-            # This allows memory saving (freeing graph per layer) at cost of communication latency.
+            # Note: We iterate layers. DDP will sync gradients on every
+            # .backward() call. This allows memory saving (freeing graph
+            # per layer) at cost of communication latency.
             layer_losses = []
 
             for layer_idx, h in enumerate(hidden_states):

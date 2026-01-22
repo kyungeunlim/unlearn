@@ -45,8 +45,8 @@ ALGO_ALIASES = {
 
 def get_best_model_name(algo_aliases, all_models, filter_pert=False):
     """
-    Filters models to find one matching the task, base model, split, and one of the algo aliases.
-    Returns the first match found.
+    Filters models to find one matching the task, base model, split,
+    and one of the algo aliases. Returns the first match found.
     """
     # Pre-filter for task, model, and split to reduce search space
     relevant_models = [
@@ -132,7 +132,8 @@ def analyze(model: PreTrainedModel, dataset: Dataset, batch_size: int):
             total_accuracy += accuracy * num_seqs
 
             # --- Hidden State Norm Calculation ---
-            # hidden_states is a tuple of tensors (one for embeddings + one for each layer)
+            # hidden_states is a tuple of tensors
+            # (one for embeddings + one for each layer)
             hidden_states = outputs.hidden_states
 
             # Initialize the running sum list if this is the first batch

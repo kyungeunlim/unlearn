@@ -11,7 +11,7 @@ class AlignmentStrategy(ABC):
         target_tokens: list[int],
     ) -> list[int]:
         """
-        Abstract method to generate a mapping from Source Token Index -> Target Token Index.
+        Generate a mapping from Source Token Index -> Target Token Index.
 
         Args:
             source_tokens: The reference sequence.
@@ -85,7 +85,8 @@ class SnapAlignmentStrategy(AlignmentStrategy):
             print(f"  [DEBUG] Found {len(anchors)} anchors.")
             for idx, a in enumerate(anchors):
                 print(
-                    f"    -> Anchor {idx}: Source[{a[0]}:{a[0]+a[2]}] maps to Target[{a[1]}:{a[1]+a[2]}]"
+                    f"    -> Anchor {idx}: Source[{a[0]}:{a[0]+a[2]}] "
+                    f"maps to Target[{a[1]}:{a[1]+a[2]}]"
                 )
 
         return anchors
@@ -104,13 +105,15 @@ class SnapAlignmentStrategy(AlignmentStrategy):
         if target_len == 0:
             if debug:
                 print(
-                    f"    [DEBUG] Empty Target Gap. Mapping {source_len} source tokens to index {fallback_index}."
+                    f"    [DEBUG] Empty Target Gap. "
+                    f"Mapping {source_len} source tokens to index {fallback_index}."
                 )
             return [fallback_index] * source_len
 
         if debug:
             print(
-                f"    [DEBUG] Snapping Gap: Squashing {source_len} source tokens into {target_len} target tokens."
+                f"    [DEBUG] Snapping Gap: Squashing {source_len} source "
+                f"tokens into {target_len} target tokens."
             )
         alignment = []
         for i in range(source_len):
@@ -133,8 +136,8 @@ class SnapAlignmentStrategy(AlignmentStrategy):
             target_tokens: The sequence to align against.
 
         Returns:
-            List[int]: A list of length len(source_tokens).
-                       result[i] is the index j in target_tokens that aligns with source_tokens[i].
+            List[int]: A list of length len(source_tokens). result[i] is the
+                       index j in target_tokens that aligns with source[i].
 
         Raises:
             ValueError: If either sequence is empty.
@@ -147,7 +150,8 @@ class SnapAlignmentStrategy(AlignmentStrategy):
 
         if debug:
             print(
-                f"\n[DEBUG] Starting Alignment. Source Len: {len(source_tokens)}, Target Len: {len(target_tokens)}"
+                f"\n[DEBUG] Starting Alignment. "
+                f"Source Len: {len(source_tokens)}, Target Len: {len(target_tokens)}"
             )
 
         anchors = self._find_anchors(source_tokens, target_tokens)

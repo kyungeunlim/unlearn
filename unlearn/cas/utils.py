@@ -206,8 +206,10 @@ def get_jailbreak_examples(
                 ],
                 tokenize=False,
             )
-            # p = p[len(tokenizer.bos_token):] + '<|im_start|>Assistant:<|im_end|>\n'  # needed to strip the bos token off which will be added back later during gcg
-            # pt = pt[len(tokenizer.bos_token):]  # needed to strip the bos token off which will be added back later during gcg
+            # p = p[len(tokenizer.bos_token):] + '<|im_start|>Assistant:<|im_end|>\n'
+            # needed to strip the bos token off for gcg
+            # pt = pt[len(tokenizer.bos_token):]
+            # needed to strip the bos token off for gcg
             t = pt[len(p) :]
             prompts.append(p)
             targets.append(t)
@@ -232,7 +234,7 @@ def get_jailbreak_examples(
                 conversation_list, tokenize=False
             )
             return conversation
-        else:  # return a list of long conversations, each with the custom final prompt at the end
+        else:  # return list of long convos with custom final prompt at end
             all_conversations = []
             for p in custom_prompts:
                 all_conversations.append(
@@ -332,7 +334,9 @@ def get_parsed_response(prompt, response):
 
 def jailbreak_eval(prompts, responses, batch_size=8):
 
-    # parsed_responses = [get_parsed_response(p, r) for p, r in zip(prompts, responses)]  # TODO can I speed this up with pooling
+    # parsed_responses = [
+    #     get_parsed_response(p, r) for p, r in zip(prompts, responses)
+    # ]  # TODO can I speed this up with pooling
     with Pool(processes=batch_size) as pool:
         parsed_responses = pool.starmap(get_parsed_response, zip(prompts, responses))
 
@@ -385,8 +389,14 @@ def jailbreak_eval_model(model, tokenizer, num_examples=100, pfx=None, num_fs=0)
     print("EVAL EXAMPLE:")
     print(f"Prompt: {prompts[0]}")
     print(f"Response: {responses[0]}")
-    # responses = [tokenizer.decode(tokenizer(r).input_ids, skip_special_tokens=True) for r in responses]
-    # responses = [r.strip().replace('assistant\n', '').replace('<|assistant|>\n', '') for r in responses]
+    # responses = [
+    #     tokenizer.decode(tokenizer(r).input_ids, skip_special_tokens=True)
+    #     for r in responses
+    # ]
+    # responses = [
+    #     r.strip().replace('assistant\n', '').replace('<|assistant|>\n', '')
+    #     for r in responses
+    # ]
     scores = jailbreak_eval(prompts, responses)
     return np.mean(scores)
 
@@ -512,7 +522,10 @@ def get_model_and_tokenizer(model_name, revision="main", dm="auto"):
     )
     tokenizer = AutoTokenizer.from_pretrained(model_name, revision=revision)
     if "Unlearning" in model_name:
-        # tokenizer.add_special_tokens({'bos_token': '[BOS]', 'eos_token': '[EOS]', 'unk_token': '[UNK]', 'sep_token': '[SEP]', 'cls_token': '[CLS]', 'mask_token': '[MASK]'})
+        # tokenizer.add_special_tokens({
+        #     'bos_token': '[BOS]', 'eos_token': '[EOS]', 'unk_token': '[UNK]',
+        #     'sep_token': '[SEP]', 'cls_token': '[CLS]', 'mask_token': '[MASK]'
+        # })
         tokenizer.add_special_tokens(
             {
                 "pad_token": "<|padding|>",
@@ -524,30 +537,3 @@ def get_model_and_tokenizer(model_name, revision="main", dm="auto"):
     else:
         tokenizer.pad_token = tokenizer.eos_token or tokenizer.unk_token
     return model, tokenizer
-
-
-# import sys
-# import torch
-# sys.path.append('./lm-evaluation-harness')
-# from transformers import AutoModelForCausalLM
-# from transformers import AutoTokenizer
-# from lm_eval import evaluator
-# from lm_eval.models.huggingface import HFLM
-
-# model = AutoModelForCausalLM.from_pretrained('Unlearning/pythia1.5_baseline', revision='annealing_step_11921', device_map='auto')
-# tokenizer = AutoTokenizer.from_pretrained('Unlearning/pythia1.5_baseline', revision='annealing_step_11921')
-# tokenizer.add_special_tokens({'bos_token': '[BOS]', 'eos_token': '[EOS]', 'unk_token': '[UNK]', 'sep_token': '[SEP]', 'cls_token': '[CLS]', 'mask_token': '[MASK]'})
-# tokenizer.pad_token = tokenizer.eos_token or tokenizer.unk_token
-# model.eval()
-
-# with torch.no_grad():
-#     hflm_model = HFLM(model, revision='annealing_step_11921')
-#     eval_results = evaluator.simple_evaluate(model=hflm_model,
-#                                                 tasks=['wmdp_bio_aisi'],
-#                                                 device=model.device,
-#                                                 verbosity='ERROR',
-#                                                 limit=None,
-#                                                 num_fewshot=0,)
-
-# acc = eval_results['results']['wmdp_bio_aisi']['acc,none']
-# print(acc)

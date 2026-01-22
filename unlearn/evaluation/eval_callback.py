@@ -52,7 +52,9 @@ class EvalCallback(TrainerCallback):
                     "STEP": str(state.global_step),
                     "OUTPUT_DIR": args.output_dir,
                     "CHECKPOINT_PATH": checkpoint_path,
-                    "RESULTS_PATH": f"{args.output_dir}/eval_results_{state.global_step}",
+                    "RESULTS_PATH": (
+                        f"{args.output_dir}/eval_results_{state.global_step}"
+                    ),
                     "TASKS": ",".join(self.tasks),
                     "INCLUDE_PATH": str(self.include_path),
                     "WANDB_RUN_ID": wandb.run.id,
@@ -69,12 +71,14 @@ class EvalCallback(TrainerCallback):
 
             if result.returncode == 0:
                 print(
-                    f"[Step {state.global_step}] Submitted eval job: {result.stdout.strip()}",
+                    f"[Step {state.global_step}] "
+                    f"Submitted eval job: {result.stdout.strip()}",
                     flush=True,
                 )
             else:
                 print(
-                    f"[Step {state.global_step}] Failed to submit eval job: {result.stderr}",
+                    f"[Step {state.global_step}] "
+                    f"Failed to submit eval job: {result.stderr}",
                     flush=True,
                 )
 

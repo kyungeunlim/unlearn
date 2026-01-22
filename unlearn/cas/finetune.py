@@ -91,7 +91,9 @@ if __name__ == "__main__":
         print(f"{arg}: {value}")
     print()
 
-    # model, tokenizer = get_model_and_tokenizer('Unlearning/pythia1.5_baseline', revision='annealing_step_11921')
+    # model, tokenizer = get_model_and_tokenizer(
+    #     'Unlearning/pythia1.5_baseline', revision='annealing_step_11921'
+    # )
     model, tokenizer = get_model_and_tokenizer(
         args.model_name, revision=args.revision, dm="auto"
     )
@@ -100,11 +102,19 @@ if __name__ == "__main__":
     #     prompt = "Hey, are you conscious? Can you talk to me?"
     #     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
     #     generate_ids = model.generate(inputs.input_ids, max_length=30)
-    #     tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+    #     tokenizer.batch_decode(
+    #         generate_ids, skip_special_tokens=True,
+    #         clean_up_tokenization_spaces=False
+    #     )[0]
 
-    # wmdp_acc = lm_eval_model(model, task='wmdp_bio_aisi', limit=args.wmdp_eval_limit, tokenizer=tokenizer)
-    # mmlu_acc = lm_eval_model(model, task='mmlu', limit=args.mmlu_agieval_limit, tokenizer=tokenizer)
-    # print(f'***\nOriginal wmdp_acc: {wmdp_acc}, original mmlu_acc {mmlu_acc}\n***')
+    # wmdp_acc = lm_eval_model(
+    #     model, task='wmdp_bio_aisi', limit=args.wmdp_eval_limit,
+    #     tokenizer=tokenizer
+    # )
+    # mmlu_acc = lm_eval_model(
+    #     model, task='mmlu', limit=args.mmlu_agieval_limit, tokenizer=tokenizer
+    # )
+    # print(f'***\nOriginal wmdp_acc: {wmdp_acc}, mmlu_acc {mmlu_acc}\n***')
 
     training_datasets = []
 
@@ -363,7 +373,10 @@ if __name__ == "__main__":
     if args.eval_every > 0:
         print(f"***\nWMDP eval performance over time: {callbacks[0].eval_results}\n***")
 
-    # mmlu_acc = lm_eval_model(model, task='mmlu', limit=args.mmlu_agieval_limit, revision=args.revision, tokenizer=tokenizer)
+    # mmlu_acc = lm_eval_model(
+    #     model, task='mmlu', limit=args.mmlu_agieval_limit,
+    #     revision=args.revision, tokenizer=tokenizer
+    # )
 
     if "smollm2" not in args.model_name and args.eval_every < 0:
         wmdp_acc = lm_eval_model(

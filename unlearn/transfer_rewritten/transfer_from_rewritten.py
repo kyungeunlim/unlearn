@@ -129,7 +129,8 @@ class AlternatingDataset(TorchIterableDataset):
             print("starting second window indices", flush=True)
         yield from self.second_ds.select(window_indices)
 
-        # Increment counter so next time __iter__ is called (next epoch), we move the window
+        # Increment counter so next time __iter__ is called (next epoch),
+        # we move the window
         self._epoch_counter += 1
         print("epoch counter now", self._epoch_counter, flush=True)
 
@@ -358,7 +359,7 @@ class TransferDataCollator:
         return torch.cat([tensor, padding])
 
     def __call__(self, batch):
-        """Returns source and target input IDs interleaved into a single batch of input IDs"""
+        """Return source and target input IDs interleaved into one batch."""
         input_ids_list = []
         attention_mask_list = []
         labels_list = []

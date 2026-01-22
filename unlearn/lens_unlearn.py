@@ -33,6 +33,7 @@ from unlearn.cas.utils import (
     refusal_compliance_tokenize_function,
     wikitext_tokenize_function,
 )
+from unlearn.utils.worker_utils import get_model_and_tokenizer, unwrap_model
 
 
 class UnlearningDataset(Dataset):
@@ -196,9 +197,8 @@ class RRTrainer(UnlearningTrainer):
     def compute_loss(
         self, model, inputs, return_outputs=False, num_items_in_batch=None
     ):
-        # 1. SAFELY UNWRAP MODEL
-        # This works for both DDP (returns inner model) and Single GPU (returns model as-is).
-        # We need this to access .disable_adapter() and specific layers.
+        # 1. Unwrap model if using DDP to access .disable_adapter()
+        # and specific layers.
         unwrapped_model = unwrap_model(model)
 
         # Determine device from inputs (safest way in DDP)
@@ -213,9 +213,7 @@ class RRTrainer(UnlearningTrainer):
         retain_input_ids = inputs.get("input_ids").to(target_device)
         retain_attention_mask = inputs.get("attention_mask").to(target_device)
         # ==== cb ====
-        circuit_breaker_input_ids = inputs.get("bio_remove_input_ids").to(
-            target_device
-        )
+        circuit_breaker_input_ids = inputs.get("bio_remove_input_ids").to(target_device)
         circuit_breaker_attention_mask = inputs.get("bio_remove_attention_mask").to(
             target_device
         )
@@ -253,7 +251,8 @@ class RRTrainer(UnlearningTrainer):
         # Optimization: Broadcasting masks (Batch, Seq) -> (1, Batch, Seq, 1)
         broadcast_retain_mask = retain_attention_mask.unsqueeze(0).unsqueeze(-1)
 
-        # Use unwrapped_model for context manager (DDP wrapper doesn't have disable_adapter)
+        # Use unwrapped_model for context manager
+        # (DDP wrapper doesn't have disable_adapter)
         with unwrapped_model.disable_adapter():
             unwrapped_model.eval()
             with torch.no_grad():
@@ -268,11 +267,12 @@ class RRTrainer(UnlearningTrainer):
 
         ### Retain control
         if retain_coeff > 0:
-            # We use unwrapped_model here because we are accessing specific hidden states.
-            # DDP usually requires using 'model' to sync gradients, but since we are
-            # effectively doing a manual loss calculation on sub-components,
-            # and Accelerate/Trainer handles the backward pass sync, this is generally safe.
-            # If you see hanging, switch these forward passes to use 'model' (but you lose direct access to [module] output structure if wrapped).
+            # We use unwrapped_model to access specific hidden states.
+            # DDP usually requires using 'model' to sync gradients, but since
+            # we are effectively doing a manual loss calculation on sub-components
+            # and Accelerate/Trainer handles the backward pass sync, this is safe.
+            # If you see hanging, switch these forward passes to use 'model'
+            # (but you lose direct access to [module] output structure if wrapped).
             lora_retain_outputs = unwrapped_model(**retain_inputs_dict)[module]
             lora_retain_hidden = (
                 torch.stack(lora_retain_outputs) * broadcast_retain_mask
@@ -283,7 +283,8 @@ class RRTrainer(UnlearningTrainer):
         else:
             retain_loss = 0
 
-        ### Forget loss - entropy maximization via tuned lens (memory-efficient CE proxy)
+        ### Forget loss - entropy maximization via tuned lens
+        ### (memory-efficient CE proxy)
         if circuit_breaker_coeff > 0:
             lora_circuit_breaker_outputs = unwrapped_model(**cb_inputs_dict)[module]
 
@@ -342,7 +343,11 @@ class RRTrainer(UnlearningTrainer):
                 else mean_entropy
             )
             print(
-                f"retain_coeff: {retain_coeff:.4f} || forget_coeff: {circuit_breaker_coeff:.4f} || retain_loss: {retain_loss:.4f} || forget_loss: {circuit_breaker_loss:.4f} || mean_entropy: {entropy_val:.4f}"
+                f"retain_coeff: {retain_coeff:.4f} || "
+                f"forget_coeff: {circuit_breaker_coeff:.4f} || "
+                f"retain_loss: {retain_loss:.4f} || "
+                f"forget_loss: {circuit_breaker_loss:.4f} || "
+                f"mean_entropy: {entropy_val:.4f}"
             )
 
         # Optimization: Moved heavy eval out of loop
@@ -411,7 +416,8 @@ if __name__ == "__main__":
     lens = TunedLens.from_model(model, bias=True)
     lens_state_dict = torch.load(f"{args.lens_path}/params.pt", map_location=device)
 
-    # Map saved keys (e.g., "0.weight") to expected keys (e.g., "layer_translators.0.weight")
+    # Map saved keys (e.g., "0.weight") to expected keys
+    # (e.g., "layer_translators.0.weight")
     mapped_state_dict = {}
     num_layers = len(lens)
     for i in range(num_layers):
@@ -587,7 +593,8 @@ if __name__ == "__main__":
     grad_acc_steps = max(1, global_batch_size // (args.pdbs * world_size))
 
     print(
-        f"Running with {world_size} GPUs. Per device batch: {args.pdbs}. Grad Acc steps: {grad_acc_steps}."
+        f"Running with {world_size} GPUs. Per device batch: {args.pdbs}. "
+        f"Grad Acc steps: {grad_acc_steps}."
     )
 
     training_args = TrainingArguments(
@@ -636,7 +643,8 @@ if __name__ == "__main__":
                 model, tokenizer, num_examples=500, pfx=None, num_fs=0
             )
             print(
-                f"***\nFinal jailbreak_score: {jailbreak_score}, final mmlu_acc {mmlu_acc}\n***"
+                f"***\nFinal jailbreak_score: {jailbreak_score}, "
+                f"final mmlu_acc {mmlu_acc}\n***"
             )
 
     if args.lora:

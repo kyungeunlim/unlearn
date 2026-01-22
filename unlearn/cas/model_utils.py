@@ -22,7 +22,7 @@ class TransformerEngineGPTNeoXMLP(GPTNeoXMLP):
 
 
 class TransformerEngineGPTNeoXForCausalLM(GPTNeoXForCausalLM):
-    """GPTNeoX with custom MLP that includes LayerNorm for Transformer Engine compatibility"""
+    """GPTNeoX with custom MLP with LayerNorm for Transformer Engine."""
 
     def __init__(self, config):
         super().__init__(config)

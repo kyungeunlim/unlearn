@@ -9,12 +9,14 @@ import transformers
 class LorraArguments:
     target_layers: str = field(
         metadata={
-            "help": "Layers for Representation. Layers are seperate by `,` eg: `10,12,14,16,18,20` "
+            "help": "Layers for Representation. "
+            "Layers are separated by `,` eg: `10,12,14,16,18,20`"
         }
     )
     transform_layers: str = field(
         metadata={
-            "help": "Layers for Representation. Layers are seperate by `,` eg: `10,12,14,16,18,20` "
+            "help": "Layers for Representation. "
+            "Layers are separated by `,` eg: `10,12,14,16,18,20`"
         }
     )
     lorra_alpha: float = field(
@@ -23,19 +25,22 @@ class LorraArguments:
     trainsets: typing.List[str] = field(
         default=None,
         metadata={
-            "help": "A list of trainsets for finetuning the corresponding Concepts/Functions, separated by # for commandline inputs (eg: ['AlpacaSupervisedDataset'])"
+            "help": "A list of trainsets for finetuning the Concepts/Functions, "
+            "separated by # (eg: ['AlpacaSupervisedDataset'])"
         },
     )
     valsets: typing.List[str] = field(
         default=None,
         metadata={
-            "help": "A list of valsets for finetuning the corresponding Concepts/Functions, separated by # for commandline inputs (eg: ['AlpacaSupervisedDataset'])"
+            "help": "A list of valsets for finetuning the Concepts/Functions, "
+            "separated by # (eg: ['AlpacaSupervisedDataset'])"
         },
     )
     adv_string: str = field(
         default="",
         metadata={
-            "help": "adversarial string for harmful prompt. (eg: Start with 'Sure here's')"
+            "help": "adversarial string for harmful prompt. "
+            "(eg: Start with 'Sure here's')"
         },
     )
     full_layers: bool = field(
@@ -45,7 +50,8 @@ class LorraArguments:
     use_final_mse_retain_loss: bool = field(
         default=True,
         metadata={
-            "help": "Whether to use final layer MSE loss (True) or L2 norm loss across all layers (False) for retain loss"
+            "help": "Whether to use final layer MSE loss (True) "
+            "or L2 norm loss across all layers (False) for retain loss"
         },
     )
     affine: bool = field(
@@ -108,7 +114,8 @@ class TrainingArguments(transformers.TrainingArguments):
     model_max_length: int = field(
         default=1024,
         metadata={
-            "help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."
+            "help": "Maximum sequence length. "
+            "Sequences will be right padded (and possibly truncated)."
         },
     )
     grouped_to_max_length: bool = field(
@@ -141,7 +148,9 @@ class TrainingArguments(transformers.TrainingArguments):
     sc_loss_type: Optional[str] = field(
         default="orig_act_dotprod",
         metadata={
-            "help": "type of loss function for shortcircuiting. can be orig_act_dotprod, rand_vec_norm, pos_constant_rmu_{coeff}, center_constant_rmu_{coeff}"
+            "help": "type of loss function for shortcircuiting. can be "
+            "orig_act_dotprod, rand_vec_norm, pos_constant_rmu_{coeff}, "
+            "center_constant_rmu_{coeff}"
         },
     )
     cb_loss_scale: Optional[float] = field(
