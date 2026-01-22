@@ -31,8 +31,10 @@ from unlearn.cas.utils import (
     refusal_compliance_tokenize_function,
     wikitext_tokenize_function,
 )
+from unlearn.utils.utils import assert_type
 from unlearn.utils.worker_utils import get_model_and_tokenizer
 from unlearn.hook import ActivationCapture
+
 
 
 class UnlearningDataset(Dataset):
@@ -98,8 +100,10 @@ class UnlearningTrainer(Trainer):
         if hasattr(base, "base_model"):
             base = base.base_model
         if hasattr(base, "model"):
-            base = base.model
-            
+            base = base.model # type: ignore
+
+        base = assert_type(nn.Module, base)
+
         # Identify the list of layers (e.g., 'layers', 'blocks', 'h')
         layer_list_name = None
         for name, module in base.named_modules():
@@ -170,7 +174,7 @@ class UnlearningTrainer(Trainer):
             dataloader_params["worker_init_fn"] = seed_worker
             dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
 
-        return self.accelerator.prepare(DataLoader(train_dataset, **dataloader_params))
+        return self.accelerator.prepare(DataLoader(train_dataset, **dataloader_params)) # type: ignore
 
 
 class RRTrainer(UnlearningTrainer):
@@ -187,12 +191,12 @@ class RRTrainer(UnlearningTrainer):
         )
 
         # === retain ===
-        retain_input_ids = inputs.get("input_ids").to(target_device)
-        retain_attention_mask = inputs.get("attention_mask").to(target_device)
+        retain_input_ids = inputs.get("input_ids").to(target_device) # type: ignore
+        retain_attention_mask = inputs.get("attention_mask").to(target_device) # type: ignore
         # ==== cb ====
-        circuit_breaker_input_ids = inputs.get("bio_remove_input_ids").to(target_device)
-        circuit_breaker_attention_mask = inputs.get("bio_remove_attention_mask").to(
-            target_device
+        circuit_breaker_input_ids = inputs.get("bio_remove_input_ids").to(target_device) # type: ignore
+        circuit_breaker_attention_mask = inputs.get("bio_remove_attention_mask").to( # type: ignore
+            target_device # type: ignore
         )
 
         # ==== Inputs ====
@@ -229,7 +233,7 @@ class RRTrainer(UnlearningTrainer):
         capturer = ActivationCapture(unwrapped_model, self.target_module_names)
 
         # --- Forward Pass 1: Reference (No Adapter) ---
-        with unwrapped_model.disable_adapter():
+        with unwrapped_model.disable_adapter(): # type: ignore
             unwrapped_model.eval()
             capturer.register() # Attach hooks
             
@@ -338,7 +342,7 @@ class RRTrainer(UnlearningTrainer):
 if __name__ == "__main__":
     assert torch.cuda.is_available(), "CUDA is not available"
 
-    NUM_PROC = os.cpu_count() // 2
+    NUM_PROC = (os.cpu_count() or 32) // 2
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--num_train_examples", type=int, default=1024)

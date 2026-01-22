@@ -10,6 +10,8 @@ from lm_eval.models.huggingface import HFLM
 from lm_eval.tasks import TaskManager
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from unlearn.utils.utils import assert_type
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SCRIPT_DIR)
 
@@ -49,11 +51,13 @@ def main():
     )
 
     print("Running evaluation on wmdp_bio_robust...")
-    results = simple_evaluate(
-        model=lm,
-        tasks=["wmdp_bio_robust"],
-        task_manager=tm,
+    # The type hints for this package don't work for some reason.
+    results = simple_evaluate( # type: ignore
+        model=lm, # type: ignore
+        tasks=["wmdp_bio_robust"], # type: ignore
+        task_manager=tm, # type: ignore
     )
+    results = assert_type(dict, results)
 
     print("\n" + "=" * 60)
     print("WMDP Bio Robust Results:")

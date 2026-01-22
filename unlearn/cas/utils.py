@@ -138,7 +138,6 @@ def lm_eval_model(
             limit=limit,
             num_fewshot=0,
             system_instruction=system_instruction,
-            doc_prefix=doc_prefix,
         )
         del hflm_model
         if task == "mmlu":

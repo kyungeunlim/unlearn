@@ -57,8 +57,8 @@ class EvalCallback(TrainerCallback):
                     ),
                     "TASKS": ",".join(self.tasks),
                     "INCLUDE_PATH": str(self.include_path),
-                    "WANDB_RUN_ID": wandb.run.id,
-                    "WANDB_PROJECT": wandb.run.project,
+                    "WANDB_RUN_ID": wandb.run.id, # type: ignore
+                    "WANDB_PROJECT": wandb.run.project, # type: ignore
                 }
             )
 
