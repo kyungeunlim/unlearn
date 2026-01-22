@@ -12,9 +12,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from unlearn.utils.utils import assert_type
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-REPO_ROOT = os.path.dirname(SCRIPT_DIR)
-
 
 def main():
     parser = argparse.ArgumentParser()
@@ -30,10 +27,15 @@ def main():
         default=8,
         help="Batch size for evaluation",
     )
+    parser.add_argument(
+        "--include_path",
+        type=str,
+        default=None,
+        help="Path to lm_eval_tasks",
+    )
     args = parser.parse_args()
 
-    include_path = os.path.join(REPO_ROOT, "unlearn", "lm_eval_tasks")
-    tm = TaskManager(verbosity="INFO", include_path=include_path)
+    tm = TaskManager(verbosity="INFO", include_path=args.include_path)
 
     print(f"Loading model from {args.model_path}")
     model = AutoModelForCausalLM.from_pretrained(

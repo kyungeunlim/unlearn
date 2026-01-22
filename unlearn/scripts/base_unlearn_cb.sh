@@ -13,9 +13,10 @@ accelerate launch --num_processes 4 -m unlearn.base_unlearn \
     --num_train_examples 256 --save_name base_unlearn
 
 OUTPUT_DIR="./models/EleutherAI/deep-ignorance-unfiltered_base_unlearn"
+INCLUDE_PATH="unlearn/lm_eval_tasks"
 
 echo "Running MMLU STEM evaluation..."
 python -m unlearn.evaluation.eval_mmlu_stem --model_path $OUTPUT_DIR --batch_size 8
 
 echo "Running WMDP Robust evaluation..."
-python -m unlearn.evaluation.eval_wmdp_robust --model_path $OUTPUT_DIR --batch_size 8
+python -m unlearn.evaluation.eval_wmdp_robust --model_path $OUTPUT_DIR --batch_size 8 --include_path $INCLUDE_PATH

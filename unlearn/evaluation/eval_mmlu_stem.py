@@ -40,18 +40,18 @@ def main():
         batch_size=args.batch_size,
     )
 
-    print("Running evaluation on mmlu_stem...")
+    print("Running evaluation on mmlu...")
     results = simple_evaluate(
         model=lm,
-        tasks=["mmlu_stem"],
+        tasks=["mmlu"],
     )
 
     print("\n" + "=" * 60)
-    print("MMLU STEM Results:")
+    print("MMLU Results:")
     print("=" * 60)
 
-    if "results" in results and "mmlu_stem" in results["results"]:
-        task_results = results["results"]["mmlu_stem"]
+    if "results" in results and "mmlu" in results["results"]:
+        task_results = results["results"]["mmlu"]
         for metric, value in task_results.items():
             if isinstance(value, float):
                 print(f"  {metric}: {value:.4f}")

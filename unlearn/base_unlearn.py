@@ -3,14 +3,14 @@
 
 import argparse
 import os
-from typing import Dict
+from typing import Dict, cast
 
 import torch
 from torch import nn
 from datasets import concatenate_datasets, load_dataset
 from peft import LoraConfig, get_peft_model
 from torch.utils.data import DataLoader, Dataset
-from transformers import Trainer, TrainingArguments
+from transformers import Trainer, TrainingArguments, PreTrainedModel
 from transformers.modeling_utils import unwrap_model
 from transformers.trainer_utils import seed_worker
 
@@ -58,7 +58,7 @@ class UnlearningTrainer(Trainer):
     def __init__(
         self,
         run_args,
-        model,
+        model: PreTrainedModel,
         args,
         train_dataset,
         tokenizer,
@@ -178,7 +178,7 @@ class UnlearningTrainer(Trainer):
 class RRTrainer(UnlearningTrainer):
 
     def compute_loss(
-        self, model, inputs, return_outputs=False, num_items_in_batch=None
+        self, model: PreTrainedModel, inputs, return_outputs=False, num_items_in_batch=None
     ):
         unwrapped_model = unwrap_model(model)
 
@@ -519,6 +519,7 @@ if __name__ == "__main__":
         )
 
         model = get_peft_model(model, lora_config)
+    model = cast(PreTrainedModel, model)
     model.enable_input_require_grads()
 
     world_size = int(os.environ.get("WORLD_SIZE", 1))

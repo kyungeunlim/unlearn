@@ -31,6 +31,12 @@ python scripts/eval_wmdp_robust.py --model_path ./out/DeepIgnorance_CB --batch_s
 python scripts/eval_mmlu_stem.py --model_path ./out/DeepIgnorance_CB --batch_size 8
 ```
 
+### Circuit Breakers
+
+```bash
+bash /home/luciarosequirke/lucia/unlearning/unlearn/scripts/base_unlearn_cb.sh
+```
+
 ### Tuned Lens
 
 1. Download data
