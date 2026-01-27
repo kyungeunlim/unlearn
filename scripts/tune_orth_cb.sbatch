@@ -16,20 +16,26 @@ echo "Working directory: $(pwd)"
 echo "User: $(whoami)"
 echo "============================================"
 
-# Activate conda environment
-source /home/a6a/lucia.a6a/miniforge3/bin/activate pytorch_env
-
-# Install missing dependencies if needed
-pip install --quiet peft lm-eval simple-parsing
-
-# Install the unlearn package in development mode
-cd /home/a6a/lucia.a6a/unlearn
-pip install --quiet -e .
-
 module purge
 module load PrgEnv-cray
 module load cuda/12.6
 module load brics/nccl/2.21.5-1
+
+# Activate conda environment and install CUDA-enabled PyTorch
+source /home/a6a/lucia.a6a/miniforge3/bin/activate pytorch_env
+
+# Install PyTorch with CUDA support if not already installed
+pip install --quiet torch torchvision --index-url https://download.pytorch.org/whl/cu124
+
+# Install missing dependencies
+pip install --quiet peft lm-eval simple-parsing
+
+# Install bergson (local dependency)
+pip install --quiet -e /home/a6a/lucia.a6a/bergson
+
+# Install the unlearn package in development mode
+cd /home/a6a/lucia.a6a/unlearn
+pip install --quiet -e .
 
 # Compilers and CUDA arch
 export CC=/usr/bin/gcc-12

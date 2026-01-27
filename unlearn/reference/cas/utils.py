@@ -112,7 +112,8 @@ def ask_simple_questions(model, tokenizer):
         decoded_completion = tokenizer.decode(
             completion[0].to("cpu"), skip_special_tokens=True
         )
-        print(f"Prompt + Completion: {decoded_completion.replace('\n', '')}")
+        newline = "\n"
+        print(f"Prompt + Completion: {decoded_completion.replace(newline, '')}")
     print("###")
     sys.stdout.flush()
 

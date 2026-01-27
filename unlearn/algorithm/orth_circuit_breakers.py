@@ -368,9 +368,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--alg", type=str, choices=["rr", "lat", "rr-lat"], default="rr"
     )
-    parser.add_argument("--retain_coef", type=float, default=None)
-    parser.add_argument("--remove_coef", type=float, default=None)
-    parser.add_argument("--orth_coef", type=float, default=None)
+    parser.add_argument("--retain_coef", type=float, default=2)
+    parser.add_argument("--remove_coef", type=float, default=23)
+    parser.add_argument("--orth_coef", type=float, default=10)
     parser.add_argument("--lora_r", type=float, default=16)
     parser.add_argument("--adv_lr", type=float, default=2e-3)
     parser.add_argument("--attack_iters", type=int, default=8)
@@ -390,9 +390,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     args.pdbs = 4 if args.pdbs is None else args.pdbs
-    args.retain_coef = 5 if args.retain_coef is None else args.retain_coef
-    args.remove_coef = 5 if args.remove_coef is None else args.remove_coef
-    args.orth_coef = 1.0 if args.orth_coef is None else args.orth_coef
     args.hidden_dim = 4096
 
     print("Parsed arguments:")
