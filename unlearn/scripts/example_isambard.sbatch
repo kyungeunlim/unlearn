@@ -5,7 +5,11 @@
 #SBATCH --gpus-per-node=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --time=24:00:00
-#SBATCH --output=unlearn/runs/hp-orth-%j.out
+#SBATCH --output=runs/hp-orth-%j.out
+
+# Get repository root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Arguments: $1=remove_coef, $2=orth_coef
 REMOVE_COEF=${1:-23}
@@ -37,8 +41,10 @@ mkdir -p $TMPDIR
 
 # pip install --force-reinstall --no-deps lm_eval
 
-wandb login <your token>
-huggingface-cli login --token <your token>
+
+source "$REPO_ROOT/.env"
+wandb login $WANDB_API_KEY
+huggingface-cli login --token $HF_TOKEN
 
 # Verify torch/CUDA before training
 python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}, Device count: {torch.cuda.device_count()}')"
@@ -69,7 +75,7 @@ echo "===== WMDP Eval ====="
 lm_eval --model hf \
     --model_args pretrained=$MODEL_PATH \
     --tasks wmdp_bio_robust \
-    --include_path /home/a6a/lucia.a6a/unlearn/unlearn/lm_eval_tasks \
+    --include_path "$REPO_ROOT/unlearn/lm_eval_tasks" \
     --batch_size 8
 
 echo "===== MMLU Eval ====="

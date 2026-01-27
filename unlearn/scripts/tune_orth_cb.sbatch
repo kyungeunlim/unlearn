@@ -5,7 +5,11 @@
 #SBATCH --gpus-per-node=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --time=24:00:00
-#SBATCH --output=/home/a6a/lucia.a6a/unlearn/runs/tune-orth-cb-%j.out
+#SBATCH --output=runs/tune-orth-cb-%j.out
+
+# Get repository root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 echo "============================================"
 echo "SLURM Job Info"
@@ -30,7 +34,7 @@ pip install --quiet bergson
 pip install --quiet lm-eval
 
 # Install the unlearn package in development mode
-cd /home/a6a/lucia.a6a/unlearn
+cd "$REPO_ROOT"
 pip install --quiet -e .
 
 # Use single GPU to avoid device mismatch issues
@@ -45,7 +49,7 @@ export TORCH_CUDA_ARCH_LIST="9.0"
 export TORCH_COMPILE_DISABLE=1
 
 # Set temporary directory for CUDA compilation
-export TMPDIR=/home/a6a/lucia.a6a/unlearn/tmp
+export TMPDIR="$REPO_ROOT/tmp"
 mkdir -p "$TMPDIR"
 
 # Log PyTorch / CUDA info
@@ -66,7 +70,7 @@ if torch.cuda.is_available():
 PY
 echo "================================"
 
-cd /home/a6a/lucia.a6a/unlearn
+cd "$REPO_ROOT"
 
 # Run the tuning script
 python scripts/tune_orth_cb.py

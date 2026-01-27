@@ -5,7 +5,11 @@
 #SBATCH --gpus-per-node=4
 #SBATCH --ntasks-per-node=1
 #SBATCH --time=24:00:00
-#SBATCH --output=/home/a6a/lucia.a6a/unlearn/runs/lens-unlearn-%j.out
+#SBATCH --output=runs/lens-unlearn-%j.out
+
+# Get repository root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Arguments
 NUM_TRAIN_EXAMPLES=${1:-8192}
@@ -43,8 +47,9 @@ export TMPDIR="/projects/a6a/public/lucia/tmp"
 mkdir -p $PIP_CACHE_DIR
 mkdir -p $TMPDIR
 
-export WANDB_API_KEY=<your_wandb_api_key>
-huggingface-cli login --token <your_hf_token>
+source "$REPO_ROOT/.env"
+export WANDB_API_KEY
+huggingface-cli login --token $HF_TOKEN
 
 # Verify torch/CUDA before training
 python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}, Device count: {torch.cuda.device_count()}')"
@@ -56,7 +61,7 @@ if ! python -c "import torch; exit(0 if torch.cuda.is_available() else 1)"; then
 fi
 
 # Download lens from HuggingFace if not already present
-LENS_DIR="/home/a6a/lucia.a6a/unlearn/runs/lens_cache/deep-ignorance-unfiltered-lens"
+LENS_DIR="$REPO_ROOT/runs/lens_cache/deep-ignorance-unfiltered-lens"
 mkdir -p $LENS_DIR
 
 if [ ! -f "$LENS_DIR/params.pt" ]; then
@@ -107,7 +112,7 @@ echo "===== WMDP Eval ====="
 lm_eval --model hf \
     --model_args pretrained=$MODEL_PATH \
     --tasks wmdp_bio_robust \
-    --include_path /home/a6a/lucia.a6a/unlearn/unlearn/lm_eval_tasks \
+    --include_path "$REPO_ROOT/unlearn/lm_eval_tasks" \
     --batch_size 8
 
 echo "===== MMLU Eval ====="

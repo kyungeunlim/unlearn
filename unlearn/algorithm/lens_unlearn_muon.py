@@ -16,7 +16,7 @@ from transformers.modeling_utils import unwrap_model
 from transformers.trainer_utils import seed_worker
 from tuned_lens import TunedLens
 
-from unlearn.algorithm.muon import MuonAdamW
+from unlearn.utils.muon import MuonAdamW
 from unlearn.utils.unlearning_dataset import get_unlearning_dataset
 from unlearn.utils.worker_utils import get_model_and_tokenizer, unwrap_model
 
