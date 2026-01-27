@@ -57,7 +57,7 @@ Find the boundary between:
 
 | retain_coef | remove_coef | retain_kl_loss | cb_loss | WMDP Bio (↓) | MMLU (↑) |
 |-------------|-------------|----------------|---------|--------------|----------|
-| 5           | 8           | 0.022          | 2.44    | pending      | pending  |
+| 5           | 8           | 0.022          | 2.44    | **29.72%**   | 31.57%   |
 
 ### 1000 Epochs (8000 steps, 4x batch size)
 

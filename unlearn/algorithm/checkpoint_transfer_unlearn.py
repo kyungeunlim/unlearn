@@ -563,6 +563,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Enable learning rate warmup of 10 steps (default: off)",
     )
+    parser.add_argument(
+        "--global_batch_size",
+        type=int,
+        default=32,
+        help="Global batch size across all GPUs (default: 32)",
+    )
 
     args = parser.parse_args()
 
@@ -708,7 +714,7 @@ if __name__ == "__main__":
     # Note: gradient_checkpointing=True saves memory but slows down training (~20-30%).
     # If you have enough VRAM, set this to False for further speedup.
     world_size = int(os.environ.get("WORLD_SIZE", 1))
-    global_batch_size = 32
+    global_batch_size = args.global_batch_size
     grad_acc_steps = max(1, global_batch_size // (args.pdbs * world_size))
 
     print(
