@@ -42,17 +42,22 @@ bash /home/luciarosequirke/lucia/unlearning/unlearn/scripts/base_unlearn_cb.sh
 1. Download data
 
 ```bash
-python -m bergson.bergson.unlearn.create_unlearn_data
+python -m unlearn.create_unlearn_data
 ```
 
 2. Train lens
 
 ```bash
-torchrun --nproc_per_node=8 bergson/unlearn/algorithm/tuned_lens/train.py --batch_size 4 --gradient_accumulation_steps 1 --upload_to_hf True --hf_repo_id 'EleutherAI/deep-ignorance-unfiltered-lens'
+torchrun --nproc_per_node=8 unlearn/algorithm/tuned_lens/train.py --batch_size 4 --gradient_accumulation_steps 1 --upload_to_hf True --hf_repo_id 'EleutherAI/deep-ignorance-unfiltered-lens'
 ```
 
 3. Run tuned lens unlearning
 
 ```bash
-python -m bergson.unlearn.algorithm.lens_unlearn --lens_path runs/tuned_lens/final
+python -m unlearn.algorithm.lens_unlearn --lens_path runs/tuned_lens/final
 ```
+
+## Tamper
+
+```bash
+python -m unlearn.reference.cas.finetune_attack --epochs=1 --eval_every=10 --num_train_examples=64 --model_name <input_path> --save_name <output_path>

@@ -20,5 +20,5 @@ Defaults: `remove_coef=23`, `orth_coef=10`, `retain_coef=2`
 | 15          | 5         | 32    | -    | -    | -           | -       | -         | Not trained |
 | 23          | 10        | 32    | -    | -    | -           | -       | -         | Model incomplete |
 | 30          | 15        | 32    | 26.55% | 35.14% | 4.30      | 0.18    | 0.99      | |
-| 30          | 15        | 512   | pending | pending | -       | -       | -         | Job 2018586 |
+| 30          | 15        | 512   | pending | pending | -       | -       | -         | Job 2018590 |
 | 40          | 20        | 32    | 26.63% | 35.39% | -         | -       | -         | Log truncated |
