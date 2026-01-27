@@ -16,10 +16,6 @@ Find the boundary between:
 - **LoRA rank**: 16
 - **Target layers**: [5, 10, 15, 20, 25, 30]
 
-## Hyperparameters to Tune
-- `retain_coef`: Coefficient for KL divergence retain loss (default: 5)
-- `remove_coef`: Coefficient for circuit breaker loss (default: 5)
-
 ## Training Metrics (Step 32)
 
 | retain_coef | remove_coef | retain_kl_loss | cb_loss | retain_acc | forget_acc |
@@ -38,16 +34,40 @@ Find the boundary between:
 
 ## Evaluation Results
 
-| retain_coef | remove_coef | WMDP Bio (↓ better) | MMLU STEM (↑ better) | Status |
-|-------------|-------------|---------------------|----------------------|--------|
-| 1           | 3           | pending             | pending              | eval pending |
-| 3           | 5           | pending             | pending              | eval pending |
-| 5           | 5           | pending             | pending              | eval pending |
-| 10          | 5           | pending             | pending              | eval pending |
-| 5           | 10          | pending             | pending              | eval pending |
-| 10          | 10          | pending             | pending              | eval pending |
+| retain_coef | remove_coef | WMDP Bio (↓ better) | MMLU (↑ better) | Status |
+|-------------|-------------|---------------------|-----------------|--------|
+| 1           | 3           | 29.84% ± 1.55%      | 33.61% ± 0.40%  | ✓ |
+| 3           | 5           | —                   | —               | not evaluated |
+| 5           | 5           | 31.68% ± 1.58%      | 35.73% ± 0.40%  | ✓ |
+| 10          | 5           | 30.76% ± 1.57%      | 34.98% ± 0.40%  | ✓ |
+| 5           | 10          | —                   | —               | not evaluated |
+| 10          | 10          | —                   | —               | not evaluated |
+
+## Key Findings
+
+### Boundary Analysis
+- **WMDP Bio random chance**: ~25%
+- **Achieved WMDP Bio**: 29.84% - 31.68% (incomplete unlearning, ~5-7% above random)
+- **MMLU retention**: 33.61% - 35.73%
+
+### Trade-offs
+| Setting | WMDP Bio (unlearning) | MMLU (retention) | Notes |
+|---------|----------------------|------------------|-------|
+| Low retain (1,3) | Best (29.84%) | Worst (33.61%) | More aggressive unlearning hurts retention |
+| Default (5,5) | Middle (31.68%) | Best (35.73%) | Good balance |
+| High retain (10,5) | Middle (30.76%) | Good (34.98%) | High retain pressure doesn't improve MMLU much |
+
+### Conclusions
+1. **KL divergence retain loss works** but unlearning is incomplete (WMDP still 5-7% above random)
+2. **retain_coef=5** appears optimal - best MMLU (35.73%) with reasonable WMDP (31.68%)
+3. **Lower retain_coef** improves unlearning (29.84%) but damages general capability
+4. **remove_coef** has minimal impact on unlearning effectiveness in this range
+
+### Recommended Settings
+- **For maximum unlearning**: retain_coef=1, remove_coef=3 (WMDP: 29.84%, MMLU: 33.61%)
+- **For balanced performance**: retain_coef=5, remove_coef=5 (WMDP: 31.68%, MMLU: 35.73%)
 
 ## Notes
-- WMDP Bio random chance = ~25%
-- Target: WMDP Bio near 25%, MMLU STEM as high as possible
 - All models saved to `models/EleutherAI/deep-ignorance-unfiltered_kl_ret{X}_rm{Y}`
+- Training time per config: ~6 minutes with 4x GH200
+- Evaluation time per config: ~15 minutes
