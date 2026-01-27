@@ -17,6 +17,23 @@
 | Target model (to unlearn) | 42.97% | 36.85% |
 | Checkpoint (source activations) | 24.19% | 27.78% |
 
+## Checkpoint Sweep
+
+Finding the latest checkpoint with near-random WMDP Bio performance:
+
+| Checkpoint | WMDP Bio | Notes |
+|------------|----------|-------|
+| global_step38144 | 24.19% | Current source |
+| global_step50064 | 25.23% | ~Random |
+| global_step54832 | 26.50% | ~Random (latest viable) |
+| global_step57216 | 29.03% | Learning starts |
+| global_step60792 | 30.41% | |
+| global_step70328 | 33.76% | |
+| global_step81056 | 34.10% | |
+| global_step91784 | 38.02% | |
+
+**Recommendation:** global_step54832 is ~17k steps further into training but still has effectively random WMDP performance.
+
 ## Notes
 
 - Higher remove_coef = stronger push towards checkpoint activations (more unlearning)

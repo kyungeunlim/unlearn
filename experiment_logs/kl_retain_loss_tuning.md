@@ -51,7 +51,7 @@ Find the boundary between:
 
 | retain_coef | remove_coef | retain_kl_loss | cb_loss | WMDP Bio (↓) | MMLU (↑) |
 |-------------|-------------|----------------|---------|--------------|----------|
-| 5           | 8           | pending        | pending | pending      | pending  |
+| 5           | 8           | 0.025          | 3.21    | pending      | pending  |
 
 ### Observations
 - **Longer training (4 epochs) significantly reduces losses**: cb_loss drops from ~6.3 to ~4.1
