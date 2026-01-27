@@ -5,7 +5,6 @@ from multiprocessing import Pool
 import numpy as np
 import torch
 from datasets import load_dataset
-from openai import OpenAI
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 sys.path.append("./lm-evaluation-harness")

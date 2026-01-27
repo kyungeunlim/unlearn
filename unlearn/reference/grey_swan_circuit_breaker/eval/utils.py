@@ -6,7 +6,6 @@ import numpy as np
 import torch
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
-
 from unlearn.grey_swan_circuit_breaker.eval.api import EvalInstance
 
 if sys.version_info >= (3, 12):

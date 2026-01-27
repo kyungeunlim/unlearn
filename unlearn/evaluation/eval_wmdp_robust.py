@@ -2,7 +2,6 @@
 """Evaluate a model on WMDP bio robust benchmark using lm_eval."""
 
 import argparse
-import os
 
 import torch
 from lm_eval import simple_evaluate
@@ -53,10 +52,10 @@ def main():
     )
 
     # The type hints for this package don't work for some reason.
-    results = simple_evaluate( # type: ignore
-        model=lm, # type: ignore
-        tasks=["wmdp_bio_robust"], # type: ignore
-        task_manager=tm, # type: ignore
+    results = simple_evaluate(  # type: ignore
+        model=lm,  # type: ignore
+        tasks=["wmdp_bio_robust"],  # type: ignore
+        task_manager=tm,  # type: ignore
     )
     results = assert_type(dict, results)
 

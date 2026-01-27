@@ -1,4 +1,5 @@
 from datasets import Dataset, concatenate_datasets, load_dataset
+
 from unlearn.reference.cas.utils import (
     BIO_CORRUPT_REWRITTEN_DS_NAME,
     BIO_CORRUPT_SHUFFLED_DS_NAME,
@@ -24,7 +25,7 @@ class UnlearningDataset(Dataset):
     def __len__(self):
         return len(self.interleaved_dataset["input_ids"])
 
-    def __getitem__(self, idx): # type: ignore
+    def __getitem__(self, idx):  # type: ignore
         return {
             "bio_remove_input_ids": self.tokenized_bio_remove_dataset["input_ids"][idx],
             "bio_remove_attention_mask": self.tokenized_bio_remove_dataset[
@@ -33,7 +34,6 @@ class UnlearningDataset(Dataset):
             "input_ids": self.interleaved_dataset["input_ids"][idx],
             "attention_mask": self.interleaved_dataset["attention_mask"][idx],
         }
-
 
 
 def get_unlearning_dataset(args, tokenizer, num_proc: int):
@@ -144,4 +144,3 @@ def get_unlearning_dataset(args, tokenizer, num_proc: int):
     all_remove_datasets = concatenate_datasets(remove_datasets)
 
     return UnlearningDataset(all_remove_datasets, all_retain_datasets)
-

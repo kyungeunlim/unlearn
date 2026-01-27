@@ -31,14 +31,14 @@ from transformers import (
     Trainer,
     TrainingArguments,
 )
-
-from unlearn.evaluation.eval_callback import EvalCallback
-from unlearn.utils.hook import ActivationCapture
 from unlearn.transfer_rewritten.muon import MuonAdamW
 from unlearn.transfer_rewritten.token_alignment import (
     AlignmentStrategy,
     SnapAlignmentStrategy,
 )
+
+from unlearn.evaluation.eval_callback import EvalCallback
+from unlearn.utils.hook import ActivationCapture
 
 location = "google"
 

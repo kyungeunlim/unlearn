@@ -12,31 +12,30 @@ from peft import LoraConfig, get_peft_model
 from transformers import Trainer, TrainerCallback, TrainingArguments
 
 from unlearn.reference.cas.utils import (
-    wikitext_tokenize_function,
-    refusal_compliance_tokenize_function,
-    incompetent_compliance_tokenize_function,
-    cb_tokenize_function,
-    cb_retain_tokenize_function,
-    RETAIN_CHAT_DS_NAME,
-    RETAIN_TEXT_DS_NAME,
-    RETAIN_REFUSAL_COMPLIANCE_DS_NAME,
-    RETAIN_INCOMPETENT_COMPLIANCE_DS_NAME,
-    BIO_RETAIN_DS_NAME,
-    BIO_REMOVE_DS_NAME,
+    BIO_CORRUPT_DEEPFRIED_DS_NAME,
     BIO_CORRUPT_REWRITTEN_DS_NAME,
     BIO_CORRUPT_SHUFFLED_DS_NAME,
-    BIO_CORRUPT_DEEPFRIED_DS_NAME,
-    ultrachat_tokenize_function,
+    BIO_REMOVE_DS_NAME,
+    BIO_RETAIN_DS_NAME,
     MAX_LENGTH,
+    RETAIN_CHAT_DS_NAME,
+    RETAIN_INCOMPETENT_COMPLIANCE_DS_NAME,
+    RETAIN_REFUSAL_COMPLIANCE_DS_NAME,
+    RETAIN_TEXT_DS_NAME,
+    cb_retain_tokenize_function,
+    cb_tokenize_function,
     hf_token,
+    incompetent_compliance_tokenize_function,
+    jailbreak_eval_model,
     lm_eval_model,
-    jailbreak_eval_model
+    refusal_compliance_tokenize_function,
+    ultrachat_tokenize_function,
+    wikitext_tokenize_function,
 )
 from unlearn.utils.worker_utils import get_model_and_tokenizer
 
 # Not sure what this is supposed to be
 BIO_FILTERED_DOCS_DS_NAME = None
- 
 
 
 class WMDPEvalCallback(TrainerCallback):
@@ -71,7 +70,7 @@ class WMDPEvalCallback(TrainerCallback):
             for task in eval_tasks:
                 harness_results[task] = lm_eval_model(
                     self.model,
-                    tasks=task, # type: ignore
+                    tasks=task,  # type: ignore
                     revision=self.run_args.revision,
                     tokenizer=self.tokenizer,
                     limit=self.run_args.wmdp_eval_limit,
@@ -144,7 +143,7 @@ class LogSpaceCheckpointCallback(TrainerCallback):
 
         print(f"Will save checkpoints at log-spaced steps: {sorted(self.log_steps)}")
 
-    def on_step_end(self, args, state, control, **kwargs): # type: ignore
+    def on_step_end(self, args, state, control, **kwargs):  # type: ignore
         """Trigger saves at log-spaced intervals."""
         step = state.global_step
 
@@ -380,7 +379,7 @@ if __name__ == "__main__":
 
     if args.include_bio_filtered_docs:
         bio_filtered_docs_dataset = load_dataset(
-            BIO_FILTERED_DOCS_DS_NAME, token=hf_token # type: ignore
+            BIO_FILTERED_DOCS_DS_NAME, token=hf_token  # type: ignore
         )
         bio_filtered_docs_dataset = (
             bio_filtered_docs_dataset["train"]

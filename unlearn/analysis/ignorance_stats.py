@@ -17,7 +17,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel
 
 from unlearn.utils.utils import assert_type
 
-
 # Configuration
 ORG_NAME = "open-unlearning"
 TASK_TAG = "tofu"

@@ -8,12 +8,17 @@ import torch
 import torch.nn.functional as F
 from peft import LoraConfig, get_peft_model
 from torch.utils.data import DataLoader
-from transformers import AutoModelForCausalLM, Trainer, TrainingArguments, PreTrainedModel
+from transformers import (
+    AutoModelForCausalLM,
+    PreTrainedModel,
+    Trainer,
+    TrainingArguments,
+)
 from transformers.modeling_utils import unwrap_model
 from transformers.trainer_utils import seed_worker
+from unlearn.online_affine_fitter import train_affine_transform
 
 from unlearn.utils.unlearning_dataset import get_unlearning_dataset
-from unlearn.online_affine_fitter import train_affine_transform
 
 
 def unwrap_model(model):
@@ -148,12 +153,12 @@ class RRTrainer(UnlearningTrainer):
         )
 
         # === retain ===
-        retain_input_ids = inputs.get("input_ids").to(target_device) # type: ignore
-        retain_attention_mask = inputs.get("attention_mask").to(target_device) # type: ignore
+        retain_input_ids = inputs.get("input_ids").to(target_device)  # type: ignore
+        retain_attention_mask = inputs.get("attention_mask").to(target_device)  # type: ignore
         # ==== cb ====
-        circuit_breaker_input_ids = inputs.get("bio_remove_input_ids").to(target_device) # type: ignore
-        circuit_breaker_attention_mask = inputs.get("bio_remove_attention_mask").to( # type: ignore
-            target_device # type: ignore
+        circuit_breaker_input_ids = inputs.get("bio_remove_input_ids").to(target_device)  # type: ignore
+        circuit_breaker_attention_mask = inputs.get("bio_remove_attention_mask").to(  # type: ignore
+            target_device  # type: ignore
         )
 
         # ==== Forward Inputs ====

@@ -272,7 +272,7 @@ def data_collator(batch_list):
 
 def train():
     parser = transformers.HfArgumentParser(
-        (ModelArguments, TrainingArguments, LoraArguments, GradDiffArguments) # type: ignore
+        (ModelArguments, TrainingArguments, LoraArguments, GradDiffArguments)  # type: ignore
     )
     (
         model_args,
@@ -293,7 +293,7 @@ def train():
 
     device_map = "auto"
     if len(training_args.fsdp) > 0 or (
-        HAS_DEEPSPEED and ds_integration.is_deepspeed_zero3_enabled() # type: ignore
+        HAS_DEEPSPEED and ds_integration.is_deepspeed_zero3_enabled()  # type: ignore
     ):
         logging.warning("FSDP and ZeRO3 are both currently incompatible with QLoRA.")
 

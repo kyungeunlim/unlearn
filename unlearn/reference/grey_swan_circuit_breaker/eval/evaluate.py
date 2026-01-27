@@ -8,7 +8,6 @@ from pathlib import Path
 
 import torch
 from transformers import set_seed
-
 from unlearn.grey_swan_circuit_breaker.eval import softopt
 from unlearn.grey_swan_circuit_breaker.eval.api import EvalInstance
 from unlearn.grey_swan_circuit_breaker.eval.judge import Judge, JudgeConfig

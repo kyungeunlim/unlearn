@@ -2,9 +2,8 @@ from dataclasses import dataclass
 from typing import List
 
 import numpy as np
-from vllm import LLM, SamplingParams
-
 from unlearn.grey_swan_circuit_breaker.eval.api import EvalInstance
+from vllm import LLM, SamplingParams
 
 JUDGE_PROMPTS = {
     "description": "Zeroshot Template used to get response from OpenAI's gpt models",

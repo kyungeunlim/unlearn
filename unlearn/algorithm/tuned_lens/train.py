@@ -19,6 +19,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 from tuned_lens import TunedLens
 
 
@@ -118,7 +119,7 @@ class MuonAdamWLens(torch.optim.Optimizer):
 
         super().__init__(self.param_groups, {})
 
-    def step(self, closure=None): # type: ignore
+    def step(self, closure=None):  # type: ignore
         loss = None
         if closure is not None:
             loss = closure()
@@ -300,7 +301,7 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
         )
 
     sampler = DistributedSampler(
-        dataset, # type: ignore
+        dataset,  # type: ignore
         num_replicas=world_size,
         rank=global_rank,
         shuffle=True,
@@ -308,7 +309,7 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
     )
 
     dataloader = DataLoader(
-        dataset, # type: ignore
+        dataset,  # type: ignore
         batch_size=train_cfg.batch_size,
         shuffle=False,
         sampler=sampler,
@@ -408,7 +409,7 @@ def train_tuned_lens(train_cfg: TunedLensTrainConfig):
                 avg_accum_loss = total_loss / train_cfg.gradient_accumulation_steps
 
                 if is_main_process:
-                    pbar.set_postfix( # type: ignore
+                    pbar.set_postfix(  # type: ignore
                         {"loss": f"{avg_accum_loss:.4f}", "step": global_step}
                     )
 

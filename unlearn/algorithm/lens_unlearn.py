@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from accelerate.hooks import remove_hook_from_module
 from peft import LoraConfig, get_peft_model
 from torch.utils.data import DataLoader
-from transformers import Trainer, TrainingArguments, PreTrainedModel
+from transformers import PreTrainedModel, Trainer, TrainingArguments
 from transformers.modeling_utils import unwrap_model
 from transformers.trainer_utils import seed_worker
 from tuned_lens import TunedLens
@@ -94,8 +94,8 @@ class RRTrainer(UnlearningTrainer):
         # ==== cb ====
         circuit_breaker_input_ids = inputs.get("bio_remove_input_ids").to(target_device)  # type: ignore
         circuit_breaker_attention_mask = inputs.get("bio_remove_attention_mask").to(  # type: ignore
-            target_device # type: ignore
-        ) # type: ignore
+            target_device  # type: ignore
+        )  # type: ignore
 
         # ==== Forward Inputs ====
         module = "hidden_states"
@@ -132,17 +132,17 @@ class RRTrainer(UnlearningTrainer):
 
         # Use unwrapped_model for context manager
         # (DDP wrapper doesn't have disable_adapter)
-        with unwrapped_model.disable_adapter(): # type: ignore
-            unwrapped_model.eval() # type: ignore
+        with unwrapped_model.disable_adapter():  # type: ignore
+            unwrapped_model.eval()  # type: ignore
             with torch.no_grad():
                 ### Retain control
                 if retain_coeff > 0:
-                    orig_retain_outputs = unwrapped_model(**retain_inputs_dict)[module] # type: ignore
+                    orig_retain_outputs = unwrapped_model(**retain_inputs_dict)[module]  # type: ignore
                     orig_retain_hidden = torch.stack(orig_retain_outputs).detach()
                     orig_retain_hidden *= broadcast_retain_mask
                     del orig_retain_outputs
 
-        unwrapped_model.train() # type: ignore
+        unwrapped_model.train()  # type: ignore
 
         ### Retain control
         if retain_coeff > 0:
@@ -393,7 +393,7 @@ if __name__ == "__main__":
     trainer.train()
 
     if args.lora:
-        model = model.merge_and_unload() # type: ignore
+        model = model.merge_and_unload()  # type: ignore
 
     if args.save_name:
         if "models/" in args.model_name:
