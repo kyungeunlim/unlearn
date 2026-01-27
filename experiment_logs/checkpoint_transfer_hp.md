@@ -21,18 +21,18 @@
 
 Finding the latest checkpoint with near-random WMDP Bio performance:
 
-| Checkpoint | WMDP Bio | Notes |
-|------------|----------|-------|
-| global_step38144 | 24.19% | Current source |
-| global_step50064 | 25.23% | ~Random |
-| global_step54832 | 26.50% | ~Random (latest viable) |
-| global_step57216 | 29.03% | Learning starts |
-| global_step60792 | 30.41% | |
-| global_step70328 | 33.76% | |
-| global_step81056 | 34.10% | |
-| global_step91784 | 38.02% | |
+| Checkpoint | WMDP Bio | MMLU STEM | Notes |
+|------------|----------|-----------|-------|
+| global_step38144 | 24.19% | 27.78% | Current source |
+| global_step50064 | 25.23% | - | ~Random |
+| global_step54832 | 26.50% | 28.39% | ~Random (latest viable) |
+| global_step57216 | 29.03% | - | Learning starts |
+| global_step60792 | 30.41% | - | |
+| global_step70328 | 33.76% | - | |
+| global_step81056 | 34.10% | - | |
+| global_step91784 | 38.02% | - | |
 
-**Recommendation:** global_step54832 is ~17k steps further into training but still has effectively random WMDP performance.
+**Recommendation:** global_step54832 is ~17k steps further into training but still has effectively random WMDP performance. Affine transforms available at `EleutherAI/affine-checkpoint-transfer-step54832`.
 
 ## Notes
 
@@ -58,8 +58,8 @@ Finding the latest checkpoint with near-random WMDP Bio performance:
 | 2025810 | 2 | 60 | 256 | 0.0697 | 0.8791 | 0.3606 | 0.3416 |
 | 2026007 | 2 | 100 | 256 | 0.0660 | 0.8843 | 0.3606 | 0.3416 |
 | 2026828 | 2 | 100 | 512 | 0.0608 | 0.7283 | 0.3260 | 0.3365 |
-| 2028287 | 2 | 100 | 2048 | | | | |
-| 2028225 | 2 | 50 | 2048 | | | | |
+| 2028287 | 2 | 100 | 2048 | 0.0498 | 0.7037 | 0.2972 | 0.3222 |
+| 2028225 | 2 | 50 | 2048 | 0.0375 | 0.7043 | 0.2995 | 0.3219 |
 
 ### Batch 1 Observations
 - All configurations produce similar WMDP (0.37-0.40) and MMLU (0.35-0.36)
@@ -83,4 +83,11 @@ Finding the latest checkpoint with near-random WMDP Bio performance:
 - WMDP drops further: 0.3606 → 0.3260 (closer to checkpoint baseline of 0.2419)
 - MMLU drops slightly: 0.3416 → 0.3365 (still above checkpoint baseline of 0.2778)
 - cb_loss drops significantly: 0.8843 → 0.7283 (model moving closer to checkpoint)
+
+### 8x Steps (retain=2, 2048 steps)
+- Both remove=50 and remove=100 converge to nearly identical results
+- WMDP: ~0.30 (close to checkpoint baseline of 0.2419)
+- MMLU: ~0.32 (still above checkpoint baseline of 0.2778)
+- cb_loss: ~0.70 (model very close to checkpoint activations)
+- **Conclusion**: More training steps is the key to unlearning, not higher remove_coef
 
