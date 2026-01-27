@@ -47,7 +47,7 @@ When you run the LM eval harness ensure you use all available GPUs. You may need
 
 When you hyperparameter tune don't add more training steps without permission.
 
-When you hyperparameter tune add the settings you test and their results to a markdown file which you commit regularly. Be concise.
+When you hyperparameter tune add the settings you test and their results to a markdown file in a experiment_logs directory that you commit regularly. Be concise. Add the settings first then result when it comes in.
 
 ### Environment Setup
 

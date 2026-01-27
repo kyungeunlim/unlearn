@@ -19,9 +19,9 @@ dependencies = [
     "torch",
     "transformers",
     "lm-eval",
-    "vllm",
     "bergson",
     "wandb",
+    "vllm",
     "tuned-lens",
     "matplotlib",
 ]
