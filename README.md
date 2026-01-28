@@ -71,7 +71,8 @@ sbatch file:
   #!/bin/bash
   #SBATCH --job-name=tamper-attack
   #SBATCH --nodes=1
-  #SBATCH --gpus-per-node=1
+  #SBATCH --exclusive
+  #SBATCH --gpus-per-node=4
   #SBATCH --time=4:00:00
   #SBATCH --output=/home/a6a/lucia.a6a/unlearn/runs/tamper-%j.out
 
@@ -80,9 +81,9 @@ sbatch file:
   module load cuda/12.6
 
   python unlearn/scripts/run_tamper_attack_with_plot.py \
-      --model_name=models/EleutherAI/YOUR_MODEL \
-      --output_dir=runs/tamper_YOUR_MODEL \
-      --num_train_examples=512 \
+      --model_name=models/EleutherAI/deep-ignorance-unfiltered_rm30_orth100_steps256 \
+      --output_dir=runs/tamper_deep-ignorance-unfiltered_rm30_orth100_steps256 \
+      --num_train_examples=64 \
       --epochs=1 \
       --eval_every=5 \
       --lr=2e-5
@@ -110,6 +111,7 @@ sbatch script.sbatch /path/to/model
   accelerate launch --num_processes 4 -m lm_eval --model hf \
       --model_args pretrained=$1,dtype=bfloat16 \
       --tasks mmlu \
+      --include_path "$REPO_ROOT/unlearn/lm_eval_tasks" \
       --batch_size auto
 ```
 

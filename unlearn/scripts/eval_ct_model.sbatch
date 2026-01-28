@@ -36,18 +36,20 @@ export TMPDIR="/projects/a6a/public/lucia/tmp"
 source "$REPO_ROOT/.env"
 huggingface-cli login --token $HF_TOKEN
 
-echo "===== WMDP Eval ====="
-lm_eval --model hf \
-    --model_args pretrained=$MODEL_PATH,parallelize=True \
-    --tasks wmdp_bio_robust \
+echo "===== WMDP Bio Eval ====="
+HF_DATASETS_TRUST_REMOTE_CODE=1 accelerate launch --num_processes 4 -m lm_eval --model hf \
+    --model_args pretrained=$MODEL_PATH,parallelize=True,trust_remote_code=True \
     --include_path "$REPO_ROOT/unlearn/lm_eval_tasks" \
-    --batch_size 32
+    --tasks wmdp_bio_robust \
+    --batch_size auto
 
 echo "===== MMLU Eval ====="
-HF_DATASETS_TRUST_REMOTE_CODE=1 lm_eval --model hf \
+HF_DATASETS_TRUST_REMOTE_CODE=1 accelerate launch --num_processes 4 -m lm_eval --model hf \
     --model_args pretrained=$MODEL_PATH,parallelize=True,trust_remote_code=True \
+    --include_path "$REPO_ROOT/unlearn/lm_eval_tasks" \
     --tasks mmlu \
-    --batch_size 32
+    --batch_size auto
+
 
 echo "============================================"
 echo "Completed: $(date)"

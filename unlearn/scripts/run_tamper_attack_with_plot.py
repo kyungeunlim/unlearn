@@ -77,12 +77,12 @@ class WMDPEvalCallback(TrainerCallback):
             hflm_model = HFLM(self.model)
             eval_results = evaluator.simple_evaluate(
                 model=hflm_model,
-                tasks=["wmdp_bio"],
+                tasks=["wmdp_bio_robust"],
                 device=self.model.device,
                 verbosity="ERROR",
                 num_fewshot=0,
             )
-            acc = eval_results["results"]["wmdp_bio"]["acc,none"]
+            acc = eval_results["results"]["wmdp_bio_robust"]["acc,none"]
             del hflm_model
             del eval_results
             gc.collect()

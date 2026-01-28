@@ -58,7 +58,7 @@ def get_model_and_tokenizer(model_name, dm="auto"):
     return model, tokenizer
 
 
-def lm_eval_model(model, task="wmdp_bio", limit=None):
+def lm_eval_model(model, task="wmdp_bio_robust", limit=None):
     """Evaluate the model on a specific task using the HFLM evaluator."""
     model.eval()
     with torch.no_grad():

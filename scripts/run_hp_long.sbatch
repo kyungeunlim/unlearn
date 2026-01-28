@@ -61,7 +61,8 @@ MODEL_PATH="models/EleutherAI/deep-ignorance-unfiltered_${SAVE_NAME}"
 echo "===== WMDP Eval ====="
 accelerate launch --num_processes 1 -m lm_eval --model hf \
     --model_args pretrained=$MODEL_PATH,dtype=bfloat16 \
-    --tasks wmdp_bio \
+    --tasks wmdp_bio_robust \
+    --include_path "$REPO_ROOT/unlearn/lm_eval_tasks" \
     --batch_size auto
 
 echo "===== MMLU Eval ====="

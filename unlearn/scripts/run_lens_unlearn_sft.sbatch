@@ -11,9 +11,8 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# Arguments: MODE can be "sft" or a LoRA rank number (e.g., 64, 128, 256)
-MODE=${1:-sft}
-NUM_TRAIN_EXAMPLES=${2:-1024}
+# Arguments: 
+NUM_TRAIN_EXAMPLES=${1:-1024}
 
 echo "============================================"
 echo "Lens Unlearning - Mode: $MODE"
@@ -58,35 +57,24 @@ fi
 
 NUM_GPUS=4
 
-if [ "$MODE" = "sft" ]; then
-    echo "===== Running Full SFT (no LoRA) ====="
-    SAVE_NAME="lens_ex${NUM_TRAIN_EXAMPLES}_sft"
-    CMD="torchrun --nproc_per_node=$NUM_GPUS -m unlearn.algorithm.lens_unlearn_sft \
-        --lens_path=$LENS_DIR \
-        --num_train_examples=$NUM_TRAIN_EXAMPLES \
-        --remove_coef=5.0 \
-        --retain_coef=5.0 \
-        --pdbs=2 \
-        --model_name=EleutherAI/deep-ignorance-unfiltered \
-        --save_name=$SAVE_NAME"
-else
-    LORA_R=$MODE
-    echo "===== Running LoRA with rank $LORA_R ====="
-    SAVE_NAME="lens_ex${NUM_TRAIN_EXAMPLES}_lora${LORA_R}"
-    CMD="torchrun --nproc_per_node=$NUM_GPUS -m unlearn.algorithm.lens_unlearn_sft \
-        --lens_path=$LENS_DIR \
-        --num_train_examples=$NUM_TRAIN_EXAMPLES \
-        --remove_coef=5.0 \
-        --retain_coef=5.0 \
-        --pdbs=4 \
-        --lora \
-        --lora_r=$LORA_R \
-        --model_name=EleutherAI/deep-ignorance-unfiltered \
-        --save_name=$SAVE_NAME"
-fi
+echo "===== Running Full SFT (no LoRA) ====="
+SAVE_NAME="lens_ex${NUM_TRAIN_EXAMPLES}_sft"
+CMD="torchrun --nproc_per_node=$NUM_GPUS -m unlearn.algorithm.lens_unlearn_sft \
+    --lens_path=$LENS_DIR \
+    --num_train_examples=$NUM_TRAIN_EXAMPLES \
+    --remove_coef=5.0 \
+    --retain_coef=5.0 \
+    --pdbs=2 \
+    --lr=1e-5 \
+    --model_name=EleutherAI/deep-ignorance-unfiltered \
+    --save_name=$SAVE_NAME"
+
 
 echo "Command: $CMD"
 echo ""
+
+# Run Eval
+
 
 $CMD
 

@@ -24,7 +24,7 @@ def main():
         content = f.read()
 
     # Find all evaluation results
-    pattern = r"Step (\d+): Evaluation Results: \{'wmdp_bio': ([0-9.]+)"
+    pattern = r"Step (\d+): Evaluation Results: \{'wmdp_bio_robust': ([0-9.]+)"
     matches = re.findall(pattern, content)
 
     for step, acc in matches:
