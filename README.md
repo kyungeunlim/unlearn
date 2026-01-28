@@ -112,3 +112,18 @@ sbatch script.sbatch /path/to/model
       --tasks mmlu \
       --batch_size auto
 ```
+
+## Transformer Probe
+
+Probe training details:
+- WandB run: https://wandb.ai/eleutherai/depth-scaled-probes/runs/trga8lub
+- 7 layers (8, 12, 16, 20, 24, 28, 32)
+- Depth = (32 - layer), ranging from 24 to 1 transformer layers
+- Trained on WMDP-Bio-Remove forget data
+
+Usage for unlearning:
+python -m unlearn.algorithm.probe_unlearn \
+    --probe_dir ./models/depth_scaled_probes \
+    --layers 8 12 16 20 24 28 \
+    --lora --lora_r 16 \
+    --num_train_examples 1024
