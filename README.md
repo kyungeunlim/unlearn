@@ -60,4 +60,55 @@ python -m unlearn.algorithm.lens_unlearn --lens_path runs/tuned_lens/final
 ## Tamper
 
 ```bash
-python -m unlearn.reference.cas.finetune_attack --epochs=1 --eval_every=10 --num_train_examples=64 --model_name <input_path> --save_name <output_path>
+python -m unlearn.reference.cas.finetune_attack --epochs=1 --eval_every=5 --num_train_examples=64 --model_name <input_path> --save_name <output_path>
+```
+
+## Tamper and Plot
+
+sbatch file:
+
+```bash
+  #!/bin/bash
+  #SBATCH --job-name=tamper-attack
+  #SBATCH --nodes=1
+  #SBATCH --gpus-per-node=1
+  #SBATCH --time=4:00:00
+  #SBATCH --output=/home/a6a/lucia.a6a/unlearn/runs/tamper-%j.out
+
+  source /home/a6a/lucia.a6a/miniforge3/etc/profile.d/conda.sh
+  conda activate <env_name>
+  module load cuda/12.6
+
+  python unlearn/scripts/run_tamper_attack_with_plot.py \
+      --model_name=models/EleutherAI/YOUR_MODEL \
+      --output_dir=runs/tamper_YOUR_MODEL \
+      --num_train_examples=512 \
+      --epochs=1 \
+      --eval_every=5 \
+      --lr=2e-5
+```
+
+## Evaluate Manually
+
+```
+sbatch script.sbatch /path/to/model
+```
+
+```bash
+  #!/bin/bash
+  #SBATCH --job-name=mmlu-eval
+  #SBATCH --nodes=1
+  #SBATCH --exclusive
+  #SBATCH --gpus-per-node=4
+  #SBATCH --time=1:00:00
+  #SBATCH --output=/home/a6a/lucia.a6a/unlearn/runs/mmlu-eval-%j.out
+
+  source /home/a6a/lucia.a6a/miniforge3/etc/profile.d/conda.sh
+  conda activate <env_name>
+  module load cuda/12.6
+
+  accelerate launch --num_processes 4 -m lm_eval --model hf \
+      --model_args pretrained=$1,dtype=bfloat16 \
+      --tasks mmlu \
+      --batch_size auto
+```

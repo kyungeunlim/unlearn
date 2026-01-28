@@ -25,6 +25,7 @@ from transformers import (
     TrainerCallback,
     TrainingArguments,
 )
+import bitsandbytes as bnb
 
 sys.path.append("./lm-evaluation-harness")
 
@@ -220,11 +221,17 @@ def run_tamper_attack(config: TamperAttackConfig):
         report_to=[],
     )
 
+    optimizer = bnb.optim.Adam8bit(
+        model.parameters(),
+        lr=config.lr,
+        weight_decay=0.01,
+    )
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=dataset,
         callbacks=[callback],
+        optimizers=(optimizer, None),
     )
 
     for param in model.parameters():
