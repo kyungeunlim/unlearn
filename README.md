@@ -109,13 +109,13 @@ conda activate <env_name>
 module load cuda/12.6
 
 HF_DATASETS_TRUST_REMOTE_CODE=1 accelerate launch --num_processes 4 -m lm_eval --model hf \
-    --model_args pretrained=$1,dtype=bfloat16 \
+    --model_args pretrained=$1 \
     --tasks wmdp_bio_robust \
     --include_path "$REPO_ROOT/unlearn/lm_eval_tasks" \
     --batch_size auto
 
 HF_DATASETS_TRUST_REMOTE_CODE=1 accelerate launch --num_processes 4 -m lm_eval --model hf \
-    --model_args pretrained=$1,dtype=bfloat16 \
+    --model_args pretrained=$1 \
     --tasks mmlu \
     --batch_size auto
 ```

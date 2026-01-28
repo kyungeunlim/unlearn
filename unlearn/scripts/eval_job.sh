@@ -8,7 +8,7 @@
 
 HF_DATASETS_TRUST_REMOTE_CODE=1 accelerate launch --num_processes=4 -m lm_eval \
     --model hf \
-    --model_args pretrained=${CHECKPOINT_PATH},dtype=bfloat16 \
+    --model_args pretrained=${CHECKPOINT_PATH} \
     --tasks ${TASKS} \
     --batch_size auto \
     --output_path ${RESULTS_PATH} \

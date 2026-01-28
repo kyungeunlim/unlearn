@@ -41,14 +41,14 @@ huggingface-cli login --token $HF_TOKEN
 
 echo "===== WMDP Bio Eval ====="
 HF_DATASETS_TRUST_REMOTE_CODE=1 accelerate launch --num_processes 4 -m lm_eval --model hf \
-    --model_args pretrained=$MODEL_NAME,revision=$REVISION,dtype=bfloat16 \
+    --model_args pretrained=$MODEL_NAME,revision=$REVISION \
     --include_path "$REPO_ROOT/unlearn/lm_eval_tasks" \
     --tasks wmdp_bio_robust \
     --batch_size auto
 
 echo "===== MMLU Eval ====="
 HF_DATASETS_TRUST_REMOTE_CODE=1 accelerate launch --num_processes 4 -m lm_eval --model hf \
-    --model_args pretrained=$MODEL_NAME,revision=$REVISION,dtype=bfloat16 \
+    --model_args pretrained=$MODEL_NAME,revision=$REVISION \
     --include_path "$REPO_ROOT/unlearn/lm_eval_tasks" \
     --tasks mmlu \
     --batch_size auto

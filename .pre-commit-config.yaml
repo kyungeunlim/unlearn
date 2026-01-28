@@ -16,3 +16,10 @@ repos:
     hooks:
         - id: ruff
           args: [--fix, --exit-non-zero-on-fix]
+-   repo: local
+    hooks:
+        - id: no-mmlu-stem-swap
+        name: Block mmlu → mmlu_stem changes
+        entry: bash -c 'git diff --cached | grep -qE "^\+.*mmlu[_-]?stem" && echo "Blocked: mmlu→mmlu_stem change detected" && exit 1 || exit 0'
+        language: system
+        pass_filenames: false

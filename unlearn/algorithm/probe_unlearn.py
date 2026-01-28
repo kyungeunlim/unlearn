@@ -163,12 +163,12 @@ class ProbeUnlearningTrainer(Trainer):
                 hidden = cb_outputs[layer_idx]  # [batch, seq, hidden]
 
                 # Pass through probe to get transformed activations
-                with torch.no_grad():
-                    # Probe expects float input
-                    probe_out = probe(
-                        hidden.float(),
-                        cb_attention_mask.bool()
-                    )  # [batch, seq, hidden]
+                # Note: probe weights are frozen (requires_grad=False) but we need
+                # gradients to flow through hidden states back to the model
+                probe_out = probe(
+                    hidden.float(),
+                    cb_attention_mask.bool()
+                )  # [batch, seq, hidden]
 
                 # Pass probe output through remaining layers to get logits
                 # We'll use the model's lm_head directly on the probe output
@@ -268,6 +268,11 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--num_train_examples", type=int, default=1024)
+    parser.add_argument("--unlearn_corrupt", type=bool, default=False)
+    parser.add_argument("--corrupt_ratio", type=float, default=0.5)
+    parser.add_argument(
+        "--corrupt_ds", type=str, default="rewritten", choices=["rewritten", "shuffled"]
+    )
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--pdbs", type=int, default=4)
     parser.add_argument("--retain_coef", type=float, default=5.0)
