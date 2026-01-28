@@ -411,7 +411,9 @@ if __name__ == "__main__":
         args.save_name = f"{args.save_name}_sft"
         if "models/" in args.model_name:
             args.model_name = args.model_name.replace("models/", "")
-        model.save_pretrained(f"./models/{args.model_name}_{args.save_name}")
-        tokenizer.save_pretrained(f"./models/{args.model_name}_{args.save_name}")
+        save_path = f"./models/{args.model_name}_{args.save_name}"
+        # Use trainer.save_model to properly handle FSDP state gathering
+        trainer.save_model(save_path)
+        tokenizer.save_pretrained(save_path)
 
     print("Done :)")
