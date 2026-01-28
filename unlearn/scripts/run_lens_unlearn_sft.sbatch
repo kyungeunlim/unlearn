@@ -38,6 +38,7 @@ echo "===== CUDA check ====="
 nvidia-smi | head -20
 
 export CUDA_VISIBLE_DEVICES="0,1,2,3"
+export HF_DATASETS_TRUST_REMOTE_CODE=1
 export CC=/usr/bin/gcc-12
 export CXX=/usr/bin/g++-12
 
@@ -62,8 +63,21 @@ fi
 
 NUM_GPUS=4
 
-# Model checkpoint to evaluate
-MODEL_PATH="$REPO_ROOT/models/EleutherAI/deep-ignorance-unfiltered_lens_ex1024_sft_sft"
+SAVE_NAME="lens_ex${NUM_TRAIN_EXAMPLES}_sft"
+MODEL_PATH="$REPO_ROOT/models/EleutherAI/deep-ignorance-unfiltered_${SAVE_NAME}_sft"
+
+# Training (commented out - using existing checkpoint)
+# CMD="torchrun --nproc_per_node=$NUM_GPUS -m unlearn.algorithm.lens_unlearn_sft \
+#     --lens_path=$LENS_DIR \
+#     --num_train_examples=$NUM_TRAIN_EXAMPLES \
+#     --remove_coef=5.0 \
+#     --retain_coef=5.0 \
+#     --pdbs=2 \
+#     --lr=1e-5 \
+#     --model_name=EleutherAI/deep-ignorance-unfiltered \
+#     --save_name=$SAVE_NAME"
+# echo "Command: $CMD"
+# $CMD
 
 if [ ! -d "$MODEL_PATH" ]; then
     echo "ERROR: Model checkpoint not found at $MODEL_PATH"
@@ -71,20 +85,17 @@ if [ ! -d "$MODEL_PATH" ]; then
 fi
 
 echo "Evaluating model: $MODEL_PATH"
-echo ""
 
 # Run Eval
-accelerate launch --num_processes 4 -m lm_eval --model hf \
+HF_DATASETS_TRUST_REMOTE_CODE=1 accelerate launch --num_processes 4 -m lm_eval --model hf \
     --model_args pretrained=$MODEL_PATH,dtype=bfloat16 \
     --tasks wmdp_bio_robust \
     --include_path "$REPO_ROOT/unlearn/lm_eval_tasks" \
     --batch_size auto
 
-
-accelerate launch --num_processes 4 -m lm_eval --model hf \
+HF_DATASETS_TRUST_REMOTE_CODE=1 accelerate launch --num_processes 4 -m lm_eval --model hf \
     --model_args pretrained=$MODEL_PATH,dtype=bfloat16 \
     --tasks mmlu \
-    --include_path "$REPO_ROOT/unlearn/lm_eval_tasks" \
     --batch_size auto
 
 echo "============================================"

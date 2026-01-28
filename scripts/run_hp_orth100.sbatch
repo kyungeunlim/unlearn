@@ -59,14 +59,14 @@ python -m unlearn.algorithm.orth_circuit_breakers \
 MODEL_PATH="models/EleutherAI/deep-ignorance-unfiltered_${SAVE_NAME}"
 
 echo "===== WMDP Eval ====="
-accelerate launch --num_processes 1 -m lm_eval --model hf \
+HF_DATASETS_TRUST_REMOTE_CODE=1 accelerate launch --num_processes 1 -m lm_eval --model hf \
     --model_args pretrained=$MODEL_PATH,dtype=bfloat16 \
     --tasks wmdp_bio_robust \
     --include_path "$REPO_ROOT/unlearn/lm_eval_tasks" \
     --batch_size auto
 
 echo "===== MMLU Eval ====="
-accelerate launch --num_processes 1 -m lm_eval --model hf \
+HF_DATASETS_TRUST_REMOTE_CODE=1 accelerate launch --num_processes 1 -m lm_eval --model hf \
     --model_args pretrained=$MODEL_PATH,dtype=bfloat16 \
     --tasks mmlu \
     --batch_size auto

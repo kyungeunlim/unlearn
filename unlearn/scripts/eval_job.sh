@@ -6,7 +6,7 @@
 #SBATCH --output=logs/eval.log
 #SBATCH --error=logs/eval.err
 
-accelerate launch --num_processes=4 -m lm_eval \
+HF_DATASETS_TRUST_REMOTE_CODE=1 accelerate launch --num_processes=4 -m lm_eval \
     --model hf \
     --model_args pretrained=${CHECKPOINT_PATH},dtype=bfloat16 \
     --tasks ${TASKS} \

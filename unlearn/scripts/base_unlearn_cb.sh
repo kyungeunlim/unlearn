@@ -8,7 +8,7 @@
 
 # sbatch scripts/base_unlearn_cb.sh
 
-accelerate launch --num_processes 4 -m unlearn.base_unlearn \
+HF_DATASETS_TRUST_REMOTE_CODE=1 accelerate launch --num_processes 4 -m unlearn.base_unlearn \
     --model_name EleutherAI/deep-ignorance-unfiltered \
     --num_train_examples 256 --save_name base_unlearn \
     --remove_coef 21 --retain_coef 2
