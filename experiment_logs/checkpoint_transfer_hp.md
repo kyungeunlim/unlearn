@@ -119,3 +119,20 @@ Finding the latest checkpoint with near-random WMDP Bio performance:
 - retain_coef=1 drops MMLU by 1.73% (exceeds threshold)
 - WMDP stays relatively stable (0.37-0.39) across all retain_coef values
 - Lower retain_coef → higher retain_kl_loss (0.0027 at ret=15 → 0.0200 at ret=1)
+
+## Higher Remove Coef Exploration
+
+| Job ID | retain_coef | remove_coef | Steps | retain_kl_loss | cb_loss | WMDP Bio | WMDP Robust | MMLU |
+|--------|-------------|-------------|-------|----------------|---------|----------|-------------|------|
+| 2043897 | 1 | 12 | 512 | - | - | - | 0.3468 | 0.4143 |
+
+**Observation:** Higher remove_coef (12 vs 5) with low retain_coef (1) achieves stronger unlearning (WMDP 0.3468 vs 0.3721) but at cost of 2.3% MMLU drop.
+
+## Tampering Attack Results
+
+| Model | Starting WMDP | After 10 steps | Final (110 steps) | Notes |
+|-------|---------------|----------------|-------------------|-------|
+| ret5_rm5_512 | 37.7% | ~42% | ~43% | Full recovery by step 30 |
+| ret1_rm5_512 | 37.2% | 41.9% | 42.9% | Full recovery by step 10 |
+
+**Conclusion:** Unlearning is easily reversed with small amount of finetuning on bio data. Both models recover to baseline (~43%) within 10-30 finetuning steps.

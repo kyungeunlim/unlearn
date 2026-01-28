@@ -34,12 +34,27 @@ Sequential back-to-front unlearning: for each layer L (from last to first), use 
 
 ## Retain Loss Ablation
 
-| Run | retain_loss_type | remove_coef | retain_coef | WMDP Bio Robust | MMLU | Notes |
-|-----|------------------|-------------|-------------|-----------------|------|-------|
-| 5 | L2 (hidden states) | 50 | 5 | 0.2684 | 0.4437 | Best overall |
-| 6 | KL (logits) | 50 | 5 | 0.2673 | 0.2295 | MMLU collapsed to near-random |
+### L2 vs KL with same hyperparameters (rm50, ret5)
 
-**Conclusion**: L2 norm on hidden states is superior to KL divergence on logits. KL divergence achieves similar unlearning but catastrophically degrades general capabilities.
+| retain_loss_type | WMDP Bio Robust | MMLU | Notes |
+|------------------|-----------------|------|-------|
+| L2 (hidden states) | 0.2684 | 0.4437 | Best L2 |
+| KL (logits) | 0.2673 | 0.2295 | MMLU collapsed |
+
+### KL hyperparameter sweep (requires different tuning)
+
+| remove_coef | retain_coef | WMDP Bio Robust | MMLU | Notes |
+|-------------|-------------|-----------------|------|-------|
+| 50 | 5 | 0.2673 | 0.2295 | Collapsed |
+| 20 | 10 | 0.2673 | - | Collapsed |
+| 30 | 10 | 0.2673 | - | Collapsed |
+| 20 | 20 | 0.2673 | 0.2295 | Collapsed |
+| 10 | 20 | 0.2673 | - | Collapsed |
+| 10 | 50 | 0.2673 | 0.2295 | Collapsed |
+| 5 | 50 | 0.2730 | 0.4034 | Works |
+| 5 | 100 | 0.2788 | 0.4195 | Best KL |
+
+**Conclusion**: KL divergence requires ~10-20x higher retain_coef and ~10x lower remove_coef compared to L2. With proper tuning (rm5/ret100), KL achieves comparable results to L2 (rm50/ret5).
 
 ## Hyperparameters (all runs)
 
@@ -57,10 +72,24 @@ Sequential back-to-front unlearning: for each layer L (from last to first), use 
 | bf16 | True |
 | gradient_checkpointing | True |
 
+## Tampering Attack Results
+
+Fine-tuning unlearned models on WMDP-Bio-Remove dataset to test recovery:
+
+| Model | Step 0 | Step 10 | Step 100 |
+|-------|--------|---------|----------|
+| L2 (rm50/ret5) | 0.2696 | 0.4055 | 0.4182 |
+| KL (rm5/ret100) | 0.2788 | 0.4078 | 0.4217 |
+
+Both models show rapid recovery (~10 steps) back to near-baseline WMDP accuracy.
+Plots saved in `runs/tamper_attack/` and `runs/tamper_kl_rm5_ret100/`.
+
 ## Key Findings
 
 1. Higher remove_coef pushes WMDP closer to (and below) random chance
 2. MMLU degradation remains minimal even at rm50 (~1% drop from baseline)
-3. Best result: rm50 achieves 0.2684 WMDP with 0.4437 MMLU
+3. Best L2 result: rm50/ret5 achieves 0.2684 WMDP with 0.4437 MMLU
 4. Random chance for 4-way MCQ is 0.25
-5. L2 retain loss vastly outperforms KL divergence for preserving capabilities
+5. KL divergence requires very different hyperparameters than L2 (~10-20x higher retain, ~10x lower remove)
+6. Best KL result: rm5/ret100 achieves 0.2788 WMDP with 0.4195 MMLU
+7. Both L2 and KL models are equally vulnerable to tampering attacks
