@@ -12,7 +12,7 @@
 
 ## Baselines
 
-| Model | WMDP Bio | MMLU STEM | Full MMLU |
+| Model | WMDP Bio | MMLU STEM (deprecated) | Full MMLU |
 |-------|----------|-----------|-----------|
 | Target model (to unlearn) | 42.97% | 36.85% | ~43% |
 | Checkpoint (source activations) | 24.19% | 27.78% | ~28% |
@@ -21,7 +21,7 @@
 
 Finding the latest checkpoint with near-random WMDP Bio performance:
 
-| Checkpoint | WMDP Bio | MMLU STEM | Notes |
+| Checkpoint | WMDP Bio | MMLU STEM (deprecated) | Notes |
 |------------|----------|-----------|-------|
 | global_step38144 | 24.19% | 27.78% | Current source |
 | global_step50064 | 25.23% | - | ~Random |
@@ -42,7 +42,7 @@ Finding the latest checkpoint with near-random WMDP Bio performance:
 
 ## Runs
 
-| Job ID | retain_coef | remove_coef | Steps | retain_kl_loss | cb_loss | WMDP Bio | MMLU STEM | MMLU |
+| Job ID | retain_coef | remove_coef | Steps | retain_kl_loss | cb_loss | WMDP Bio | MMLU STEM (deprecated) | MMLU |
 |--------|-------------|-------------|-------|----------------|---------|----------|-----------|------|
 | 2021158 | 2 | 5 | 256 | 0.0190 | 0.8912 | 0.3952 | 0.3619 | - |
 | 2021163 | 2 | 20 | 256 | 0.0481 | 0.8683 | 0.3721 | 0.3524 | - |

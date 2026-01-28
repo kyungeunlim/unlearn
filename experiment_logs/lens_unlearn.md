@@ -11,7 +11,7 @@ Unlearning via tuned lens activations - training model to match lens-projected (
 
 ## Baselines
 
-| Model | WMDP Bio | MMLU STEM | MMLU |
+| Model | WMDP Bio | MMLU STEM (deprecated) | MMLU |
 |-------|----------|-----------|------|
 | Target model (to unlearn) | 42.97% | 36.85% | ~43% |
 
@@ -19,14 +19,14 @@ Unlearning via tuned lens activations - training model to match lens-projected (
 
 ### LoRA + AdamW Optimizer
 
-| examples | epochs | steps | retain_coef | remove_coef | lr | batch | LoRA rank | retain_loss | forget_loss | WMDP Bio (↓) | MMLU STEM | MMLU | Notes |
+| examples | epochs | steps | retain_coef | remove_coef | lr | batch | LoRA rank | retain_loss | forget_loss | WMDP Bio (↓) | MMLU STEM (deprecated) | MMLU | Notes |
 |----------|--------|-------|-------------|-------------|-----|-------|-----------|-------------|-------------|--------------|-----------|------|-------|
 | 8192     | 1      | 256   | 5.0         | 5.0         | 1e-3 | 32   | 16        | 1.19        | 1.04        | **23.16%**   | 34.57%    | **43.04%** | Best result |
 | 16384    | 2      | 1024  | 5.0         | 5.0         | 1e-3 | 32   | 16        | 0.74        | 1.03        | 23.50%       | 23.88%    | -     | Over-unlearned, catastrophic MMLU loss |
 
 ### SFT + Muon Optimizer (torch.optim.Muon - PyTorch 2.10)
 
-| examples | steps | retain_coef | remove_coef | muon_lr | adam_lr | WMDP Bio (↓) | MMLU STEM | MMLU | Notes |
+| examples | steps | retain_coef | remove_coef | muon_lr | adam_lr | WMDP Bio (↓) | MMLU STEM (deprecated) | MMLU | Notes |
 |----------|-------|-------------|-------------|---------|---------|--------------|-----------|------|-------|
 | 1024     | 32    | 1.0         | 2.0         | 1e-3    | 3e-4    | 24.67%       | 24.99%    | 28.71% | MMLU catastrophic |
 | 1024     | 32    | 2.0         | 1.0         | 1e-3    | 3e-4    | 29.93%       | 31.34%    | 35.19% | Better balance |
@@ -36,7 +36,7 @@ Unlearning via tuned lens activations - training model to match lens-projected (
 
 ### SFT + AdamW Optimizer
 
-| examples | steps | retain_coef | remove_coef | adam_lr | WMDP Bio (↓) | MMLU STEM | MMLU | Notes |
+| examples | steps | retain_coef | remove_coef | adam_lr | WMDP Bio (↓) | MMLU STEM (deprecated) | MMLU | Notes |
 |----------|-------|-------------|-------------|---------|--------------|-----------|------|-------|
 | 1024     | 32    | 5.0         | 2.0         | 1e-3    | 23.41%       | 24.64%    | 25.15% | MMLU catastrophic |
 | 1024     | 32    | 20.0        | 2.0         | 1e-3    | 26.55%       | 26.20%    | 25.47% | |

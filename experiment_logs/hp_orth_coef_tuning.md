@@ -6,7 +6,7 @@ Defaults: `remove_coef=23`, `orth_coef=10`, `retain_coef=2`
 
 ## Baselines
 
-| Model | WMDP Bio | MMLU STEM | Full MMLU |
+| Model | WMDP Bio | MMLU STEM (deprecated) | Full MMLU |
 |-------|----------|-----------|-----------|
 | Target model (to unlearn) | 42.97% | 36.85% | ~43% |
 
@@ -19,7 +19,7 @@ Defaults: `remove_coef=23`, `orth_coef=10`, `retain_coef=2`
 
 ## Results
 
-| remove | orth | retain | steps | WMDP | MMLU STEM | MMLU | retain_loss | cb_loss | orth_loss | Notes |
+| remove | orth | retain | steps | WMDP | MMLU STEM (deprecated) | MMLU | retain_loss | cb_loss | orth_loss | Notes |
 |--------|------|--------|-------|------|-----------|------|-------------|---------|-----------|-------|
 | 15     | 5    | 2      | 32    | -    | -         | -    | -           | -       | -         | Not trained |
 | 23     | 10   | 2      | 32    | -    | -         | -    | -           | -       | -         | Model incomplete |

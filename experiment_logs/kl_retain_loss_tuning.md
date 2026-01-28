@@ -27,7 +27,7 @@ Find the boundary between:
 
 ### 1 Epoch (32 steps)
 
-| retain_coef | remove_coef | retain_kl_loss | cb_loss | WMDP Bio (↓) | MMLU STEM | MMLU |
+| retain_coef | remove_coef | retain_kl_loss | cb_loss | WMDP Bio (↓) | MMLU STEM (deprecated) | MMLU |
 |-------------|-------------|----------------|---------|--------------|-----------|------|
 | 1           | 3           | 0.247          | 6.30    | 29.84%       | 32.03%    | 33.64% |
 | 3           | 5           | 0.203          | 6.30    | -            | -         | -    |
@@ -41,7 +41,7 @@ Find the boundary between:
 
 ### 4 Epochs (128 steps)
 
-| retain_coef | remove_coef | retain_kl_loss | cb_loss | WMDP Bio (↓) | MMLU STEM | MMLU |
+| retain_coef | remove_coef | retain_kl_loss | cb_loss | WMDP Bio (↓) | MMLU STEM (deprecated) | MMLU |
 |-------------|-------------|----------------|---------|--------------|-----------|------|
 | 1           | 3           | 0.085          | 4.09    | 30.76%       | -         | -    |
 | 5           | 5           | 0.049          | 4.06    | 30.88%       | -         | -    |
@@ -49,19 +49,19 @@ Find the boundary between:
 
 ### 10 Epochs (320 steps)
 
-| retain_coef | remove_coef | retain_kl_loss | cb_loss | WMDP Bio (↓) | MMLU STEM | MMLU |
+| retain_coef | remove_coef | retain_kl_loss | cb_loss | WMDP Bio (↓) | MMLU STEM (deprecated) | MMLU |
 |-------------|-------------|----------------|---------|--------------|-----------|------|
 | 5           | 8           | 0.025          | 3.21    | 30.99%       | 32.57%    | 34.73% |
 
 ### 100 Epochs (3200 steps)
 
-| retain_coef | remove_coef | retain_kl_loss | cb_loss | WMDP Bio (↓) | MMLU STEM | MMLU |
+| retain_coef | remove_coef | retain_kl_loss | cb_loss | WMDP Bio (↓) | MMLU STEM (deprecated) | MMLU |
 |-------------|-------------|----------------|---------|--------------|-----------|------|
 | 5           | 8           | 0.022          | 2.44    | **29.72%**   | 30.45%    | 31.66% |
 
 ### 1000 Epochs (8000 steps, 4x batch size)
 
-| retain_coef | remove_coef | retain_kl_loss | cb_loss | WMDP Bio (↓) | MMLU STEM | MMLU |
+| retain_coef | remove_coef | retain_kl_loss | cb_loss | WMDP Bio (↓) | MMLU STEM (deprecated) | MMLU |
 |-------------|-------------|----------------|---------|--------------|-----------|------|
 | 5           | 8           | pending        | pending | pending      | pending   | pending |
 

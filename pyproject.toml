@@ -11,6 +11,7 @@ keywords = ["interpretability", "explainable-ai"]
 license = {text = "MIT License"}
 dependencies = [
     "accelerate",
+    "bitsandbytes",
     "datasets",
     "jaxtyping>=0.3.3",
     "natsort",
