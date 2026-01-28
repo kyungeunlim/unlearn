@@ -108,17 +108,21 @@ source /home/a6a/lucia.a6a/miniforge3/etc/profile.d/conda.sh
 conda activate <env_name>
 module load cuda/12.6
 
-HF_DATASETS_TRUST_REMOTE_CODE=1 accelerate launch --num_processes 4 -m lm_eval --model hf \
-    --model_args pretrained=$1 \
+...
+
+torchrun --nproc_per_node=4 -m lm_eval --model hf \
+    --model_args pretrained=$MODEL_PATH \
     --tasks wmdp_bio_robust \
     --include_path "$REPO_ROOT/unlearn/lm_eval_tasks" \
     --batch_size auto
 
-HF_DATASETS_TRUST_REMOTE_CODE=1 accelerate launch --num_processes 4 -m lm_eval --model hf \
-    --model_args pretrained=$1 \
+torchrun --nproc_per_node=4 -m lm_eval --model hf \
+    --model_args pretrained=$MODEL_PATH \
     --tasks mmlu \
     --batch_size auto
 ```
+
+
 
 ## Transformer Probe
 

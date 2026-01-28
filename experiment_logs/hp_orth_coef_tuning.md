@@ -31,3 +31,6 @@ Defaults: `remove_coef=23`, `orth_coef=10`, `retain_coef=2`
 | 30     | 100  | 2      | 256   | 29.85% | 28.34%    | 34.92%  | 42.18% | 2.95        | 0.10    | 0.09      | Good balance |
 | 30     | 15   | 2      | 64    | 27.73% | -         | 36.98%  | -    | 3.46        | 0.06    | 0.52      | Good balance, near-baseline MMLU |
 | 30     | 15   | 2      | 128   | 24.35% | -         | 30.03%  | -    | 2.15        | 0.02    | 0.25      | Better orth, some capability loss |
+| 15     | 15   | 15     | 512   | 28.28% | 28.11%    | 35.74%  | 43.53% | 0.40        | 0.07    | 0.13      | Good unlearning + MMLU preserved |
+| 15     | 15   | 20     | 512   | -      | -         | -       | -    | -           | -       | -         | Training crashed (cache issue) |
+| 15     | 15   | 50     | 512   | 35.90% | 33.64%    | 36.47%  | 44.81% | 0.26        | 0.09    | 0.25      | Better MMLU, weaker unlearning |

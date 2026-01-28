@@ -94,3 +94,28 @@ Finding the latest checkpoint with near-random WMDP Bio performance:
 - cb_loss: ~0.70 (model very close to checkpoint activations)
 - **Conclusion**: More training steps is the key to unlearning, not higher remove_coef
 
+## Retain Coef Sweep (512 steps, remove=5)
+
+**Goal:** Find minimum retain_coef that maintains MMLU within 1% of baseline (0.4375).
+
+**Fixed settings:**
+- remove_coef: 5
+- Steps: 512 (num_train_examples=2048, pdbs=4)
+- affine: loaded from EleutherAI/affine-checkpoint-transfer
+
+**MMLU threshold:** >= 0.4275 (1% below baseline of 0.4375)
+
+| Job ID | retain_coef | remove_coef | Steps | retain_kl_loss | cb_loss | WMDP Bio | WMDP Robust | MMLU |
+|--------|-------------|-------------|-------|----------------|---------|----------|-------------|------|
+| 2042137 | 15 | 5 | 512 | 0.0027 | 0.7393 | - | 0.3894 | 0.4322 |
+| 2042650 | 10 | 5 | 512 | 0.0037 | 0.7392 | - | 0.3779 | 0.4312 |
+| 2042651 | 5 | 5 | 512 | 0.0062 | 0.7397 | - | 0.3779 | 0.4302 |
+| 2042935 | 2 | 5 | 512 | 0.0125 | 0.7477 | - | 0.3698 | 0.4235 |
+| 2042936 | 1 | 5 | 512 | 0.0200 | 0.7386 | - | 0.3721 | 0.4202 |
+
+### Observations
+- **Minimum retain_coef for <1% MMLU drop: 5** (MMLU=0.4302, -0.73%)
+- retain_coef=2 drops MMLU by 1.4% (exceeds threshold)
+- retain_coef=1 drops MMLU by 1.73% (exceeds threshold)
+- WMDP stays relatively stable (0.37-0.39) across all retain_coef values
+- Lower retain_coef → higher retain_kl_loss (0.0027 at ret=15 → 0.0200 at ret=1)

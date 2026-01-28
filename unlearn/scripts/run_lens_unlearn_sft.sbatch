@@ -16,7 +16,7 @@ else
     REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 fi
 
-# Arguments: 
+# Arguments:
 NUM_TRAIN_EXAMPLES=${1:-1024}
 
 echo "============================================"
@@ -39,6 +39,7 @@ nvidia-smi | head -20
 
 export CUDA_VISIBLE_DEVICES="0,1,2,3"
 export HF_DATASETS_TRUST_REMOTE_CODE=1
+export PYTHONUNBUFFERED=1
 export CC=/usr/bin/gcc-12
 export CXX=/usr/bin/g++-12
 
@@ -66,14 +67,14 @@ NUM_GPUS=4
 SAVE_NAME="lens_ex${NUM_TRAIN_EXAMPLES}_SFT"
 MODEL_PATH="$REPO_ROOT/models/EleutherAI/deep-ignorance-unfiltered_${SAVE_NAME}_sft"
 
-# Training (commented out - using existing checkpoint)
+# Training with DDP
 CMD="torchrun --nproc_per_node=$NUM_GPUS -m unlearn.algorithm.lens_unlearn_sft \
     --lens_path=$LENS_DIR \
     --num_train_examples=$NUM_TRAIN_EXAMPLES \
     --remove_coef=5.0 \
     --retain_coef=5.0 \
-    --pdbs=2 \
-    --lr=1e-4 \
+    --pdbs=1 \
+    --lr=1e-5 \
     --model_name=EleutherAI/deep-ignorance-unfiltered \
     --save_name=$SAVE_NAME"
 echo "Command: $CMD"
