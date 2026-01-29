@@ -16,17 +16,27 @@ torch.cuda.empty_cache() doesn't do what you hope it will do - don't use it.
 
 Put imports at the top of the file unless you have a very strong need to do otherwise.
 
+# Experiment Logs and Unlearning Hyperparameters
+
+When you run a training experiment or hyperparameter tune save the settings and results to a markdown file for the algorithm in the experiment_logs directory. Avoid creating new tables - few tables makes comparison easy. Add the baseline model evaluation results as the first row. Save rows for the settings you are about to test first then add results when available.
+
+Standard results columns: number of training steps, batch size, final training losses (each available separately logged loss term), MMLU accuracy, WMDP Bio Robust accuracy.
+
+Don't vary the number of training steps on your own initiative.
+
+When you hyperparameter tune an unlearning algorithm your first task is to find the boundary zone between where accuracy drops on both MMLU and WMDP Bio Robust, and where it drops on neither. You second task is to find a good point within that boundary zone - either where both evaluation accuracies drop partway, or where WMDP Bio Robust reduces to random while MMLU is preserved.
+
 # Development
 
 Use `pre-commit run --all-files` if you forget to install pre-commit and it doesn't run in the hook.
 
-Open a dedicated tmux pane named "claude-commands" to run your commands so the user can monitor it.
+Open a dedicated tmux pane named "claude-commands" to run your commands so the user can monitor them.
 
-Don't keep default run path values inside low level code - if a module calls another module, the higher level module should always inject the base path.
+Don't add default run path values to low-level code - if a module calls another module, the higher level module should inject a unique run path (e.g. `runs/unlearn_algorithm_1/retain_5_remove_2`). The low-level code should make filenames or subdirectories within the given run path (e.g. `runs/unlearn_algorithm_1/retain_5_remove_2/tamper_results`).
 
-Don't save datasetes to a directory that is not in the gitignore.
+Don't save datasets to repository directories not in the .gitignore.
 
-When you follow project conventions don't leave a comment saying (following project conventions) or similar drivel. More broadly, don't centre yourself or your decisions in the codebase, and only leave comments that are useful to other users.
+When you follow project conventions don't leave a comment saying (following project conventions) or similar drivel. More broadly, don't centre yourself or your decisions in the codebase. Only leave comments that are useful to other users. Boilerplate code should be self-documenting.
 
 ### Tests, Evals, and Hyperparameters
 
@@ -36,7 +46,7 @@ To run the custom WMDP bio subset evals the path must be included. Here's a prog
 
 ```
 # Setup Tasks
-include_path = "/path/to/bergson/bergson/unlearn/lm_eval_tasks"
+include_path = "/path/to/unlearn/unlearn/lm_eval_tasks"
 tm = TaskManager(verbosity="INFO", include_path=include_path)
 results = simple_evaluate(
     model=lm,
@@ -45,11 +55,7 @@ results = simple_evaluate(
 )
 ```
 
-When you run the LM eval harness ensure you use all available GPUs. You may need to launch a script using `subprocess` and capture its output.
-
-When you hyperparameter tune don't add more training steps without permission.
-
-When you hyperparameter tune add the settings you test and their results to a markdown file in a experiment_logs directory that you commit regularly. Be concise. Add the settings first then result when it comes in. Also add the number of training steps and the final training losses as columns in your table (each available separately logged loss term).
+When you run the LM Eval Harness use all available GPUs on the node. You may need to launch a script using `subprocess` and capture its output.
 
 ### Environment Setup
 
