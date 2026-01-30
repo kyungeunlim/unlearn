@@ -1,20 +1,20 @@
-Always test your changes by running the appropriate script or CLI command. Never complete a task without testing your changes using a script or CLI command. To test, run the script and then frequently monitor the output until it appears to be running without issue, and then check again every 30 seconds until either 3 minutes have passed or multiple iteration loops of the main computation have completed successfully. If you find an error unrelated to your task, at minimum quote the exact error back to me when you have completed your task and offer to investigate and fix it.
-
-When you make a script put it in unlearn/scripts.
+Manually test every change you make by running the appropriate script or CLI command. When you run the script, frequently monitor the output until it appears to be running without issue, and then check again every 30 seconds until either 3 minutes have passed or multiple iteration loops of the main computation have run without error. If you find an error unrelated to your task, at minimum quote back the exact error to the user after completing your task.
 
 ## Project Structure and Conventions
 
-Consider writing a new file if you add a standalone, complex feature used in more than one place.
+Never save logs, scripts, and other development files into the root of a project. Use an appropriate directory such as `runs/` (for files with only transient value) or `unlearn/scripts/` for files to be committed.
 
 When you write a script that launches a CLI command via a subprocess, print the CLI command so it can be easily reproduced.
 
+Consider writing a new file if you add a standalone, complex feature used in more than one place.
+
 Use dataclasses for config, and use simple_parsing to parse the CLI configs dataclasses. Never call a config class `cfg`, always something specific like foo_cfg, e.g. run_cfg/RunConfig. Arguments should use underscores and not dashes like `--example_arg`.
 
-Never save logs, scripts, and other random development into the root of a project. Create an appropriate directory such as runs/ or scripts/ and add it to the .gitignore if it has only transient value.
-
-torch.cuda.empty_cache() doesn't do what you hope it will do - don't use it.
+`torch.cuda.empty_cache()` doesn't do what you hope it will do - don't use it.
 
 Put imports at the top of the file unless you have a very strong need to do otherwise.
+
+Don't use try/except blocks. Use assert statements if absolutely necessary.
 
 # Experiment Logs and Unlearning Hyperparameters
 
@@ -38,7 +38,7 @@ Don't save datasets to repository directories not in the .gitignore.
 
 When you follow project conventions don't leave a comment saying (following project conventions) or similar drivel. More broadly, don't centre yourself or your decisions in the codebase. Only leave comments that are useful to other users. Boilerplate code should be self-documenting.
 
-### Tests, Evals, and Hyperparameters
+### Tests and Evaluations
 
 Mark tests requiring GPUs with `@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")`.
 
