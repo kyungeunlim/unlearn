@@ -67,7 +67,12 @@ def main():
     plt.xlabel("Training Steps", fontsize=12)
     plt.ylabel("Forget Accuracy", fontsize=12)
     plt.title(
-        f"Checkpoint Transfer with KL Retain Loss\nretain_coef={args.retain_coef}, remove_coef={args.remove_coef}, {args.epochs} epochs ({total_steps} steps)",
+        (
+            f"Checkpoint Transfer with KL Retain "
+            f"Loss\nretain_coef={args.retain_coef}, "
+            f"remove_coef={args.remove_coef}, "
+            f"{args.epochs} epochs ({total_steps} steps)"
+        ),
         fontsize=14,
     )
     plt.legend(loc="lower right")

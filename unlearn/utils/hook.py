@@ -75,7 +75,7 @@ def collect_activations(
                     device=offload_device, non_blocking=True
                 )
 
-            if token != None:
+            if token is not None:
                 activations[hookpoint] = activations[hookpoint][:, token]
 
         return input_hook
@@ -91,7 +91,7 @@ def collect_activations(
                     device=offload_device, non_blocking=True
                 )
 
-            if token != None:
+            if token is not None:
                 activations[hookpoint] = activations[hookpoint][:, token]
 
         return output_hook

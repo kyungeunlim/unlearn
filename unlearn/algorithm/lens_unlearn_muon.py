@@ -12,7 +12,6 @@ import torch.nn.functional as F
 from accelerate.hooks import remove_hook_from_module
 from torch.utils.data import DataLoader
 from transformers import PreTrainedModel, Trainer, TrainingArguments
-from transformers.modeling_utils import unwrap_model
 from transformers.trainer_utils import seed_worker
 from tuned_lens import TunedLens
 
@@ -163,7 +162,8 @@ class RRTrainer(UnlearningTrainer):
                 unwrapped_model.eval()  # type: ignore
                 with torch.no_grad():
                     if retain_coeff > 0:
-                        orig_retain_outputs = unwrapped_model(**retain_inputs_dict)[module]  # type: ignore
+                        orig_retain_outputs = unwrapped_model(**retain_inputs_dict)  # type: ignore
+                        orig_retain_outputs = orig_retain_outputs[module]
                         orig_retain_hidden = torch.stack(orig_retain_outputs).detach()
                         orig_retain_hidden *= broadcast_retain_mask
                         del orig_retain_outputs
@@ -206,8 +206,10 @@ class RRTrainer(UnlearningTrainer):
         if circuit_breaker_coeff > 0:
             lora_circuit_breaker_outputs = unwrapped_model(**cb_inputs_dict)[module]
 
-            # Use cross-entropy with random targets as memory-efficient entropy proxy
-            # Minimizing CE against random tokens spreads probability mass -> maximizes entropy
+            # Use cross-entropy with random targets as memory-efficient
+            # entropy proxy
+            # Minimizing CE against random tokens spreads probability
+            # mass -> maximizes entropy
             layer_losses = []
             lens_device = next(self.lens.parameters()).device
             for layer_idx in self.lora_target_layers:
@@ -381,7 +383,8 @@ if __name__ == "__main__":
     if use_muon:
         print("Using full SFT with Muon optimizer")
         print(
-            f"Muon LR: {args.muon_lr}, Adam LR: {args.adam_lr}, Momentum: {args.muon_momentum}"
+            f"Muon LR: {args.muon_lr}, Adam LR: {args.adam_lr}, "
+            f"Momentum: {args.muon_momentum}"
         )
     else:
         print("Using full SFT with AdamW optimizer")

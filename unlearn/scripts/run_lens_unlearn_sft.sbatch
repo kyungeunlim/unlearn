@@ -5,7 +5,7 @@
 #SBATCH --gpus-per-node=4
 #SBATCH --ntasks-per-node=1
 #SBATCH --time=4:00:00
-#SBATCH --output=runs/lens-sft-%j.out
+#SBATCH --output=/home/a6a/lucia.a6a/unlearn/runs/lens-sft-%j.out
 
 # Get repository root
 # Use SLURM_SUBMIT_DIR if available, otherwise fall back to script location
@@ -18,13 +18,17 @@ fi
 
 # Arguments:
 NUM_TRAIN_EXAMPLES=${1:-1024}
+RETAIN_COEF=${2:-20.0}
+REMOVE_COEF=${3:-5.0}
 
 echo "============================================"
-echo "Lens Unlearning - Mode: $MODE"
+echo "Lens Unlearning SFT"
 echo "Job ID: $SLURM_JOB_ID"
 echo "Node: $(hostname)"
 echo "Started: $(date)"
 echo "num_train_examples: $NUM_TRAIN_EXAMPLES"
+echo "retain_coef: $RETAIN_COEF"
+echo "remove_coef: $REMOVE_COEF"
 echo "============================================"
 
 source /home/a6a/lucia.a6a/miniforge3/etc/profile.d/conda.sh
@@ -64,16 +68,16 @@ fi
 
 NUM_GPUS=4
 
-SAVE_NAME="lens_ex${NUM_TRAIN_EXAMPLES}_SFT"
-MODEL_PATH="$REPO_ROOT/models/EleutherAI/deep-ignorance-unfiltered_${SAVE_NAME}_sft"
+SAVE_NAME="lens_ret${RETAIN_COEF}_rm${REMOVE_COEF}"
+MODEL_PATH="$REPO_ROOT/models/EleutherAI/deep-ignorance-unfiltered_${SAVE_NAME}"
 
 # Training with FSDP
 FSDP_CONFIG="$REPO_ROOT/unlearn/scripts/fsdp_config.yaml"
 CMD="accelerate launch --config_file=$FSDP_CONFIG -m unlearn.algorithm.lens_unlearn_sft \
     --lens_path=$LENS_DIR \
     --num_train_examples=$NUM_TRAIN_EXAMPLES \
-    --remove_coef=5.0 \
-    --retain_coef=20.0 \
+    --remove_coef=$REMOVE_COEF \
+    --retain_coef=$RETAIN_COEF \
     --pdbs=1 \
     --lr=1e-3 \
     --model_name=EleutherAI/deep-ignorance-unfiltered \

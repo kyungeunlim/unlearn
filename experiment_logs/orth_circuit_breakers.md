@@ -16,8 +16,6 @@ Defaults: `remove_coef=23`, `orth_coef=10`, `retain_coef=2`
 | remove | orth | retain | steps | WMDP | WMDP Robust | MMLU STEM (deprecated) | MMLU | retain_loss | cb_loss | orth_loss | Notes |
 |--------|------|--------|-------|------|-------------|-----------|------|-------------|---------|-----------|-------|
 | -      | -    | -      | -     | 42.97% | 42.97%    | 36.85%  | 45.10% | -           | -       | -         | Baseline |
-| 15     | 5    | 2      | 32    | -    | -           | -         | -    | -           | -       | -         | Not trained |
-| 23     | 10   | 2      | 32    | -    | -           | -         | -    | -           | -       | -         | Model incomplete |
 | 30     | 15   | 2      | 32    | 26.55% | -         | 35.14%  | -    | 4.30        | 0.18    | 0.99      | |
 | 30     | 15   | 2      | 512   | 24.12% | 25.81%    | 22.14%  | 23.76% | 1.08        | 0.015   | 0.05      | Severe capability damage |
 | 40     | 20   | 2      | 32    | 26.63% | -         | 35.39%  | -    | -           | -       | -         | Log truncated |
@@ -27,5 +25,4 @@ Defaults: `remove_coef=23`, `orth_coef=10`, `retain_coef=2`
 | 30     | 15   | 2      | 64    | 27.73% | -         | 36.98%  | -    | 3.46        | 0.06    | 0.52      | Good balance, near-baseline MMLU |
 | 30     | 15   | 2      | 128   | 24.35% | -         | 30.03%  | -    | 2.15        | 0.02    | 0.25      | Better orth, some capability loss |
 | 15     | 15   | 15     | 512   | 28.28% | 28.11%    | 35.74%  | 43.53% | 0.40        | 0.07    | 0.13      | Good unlearning + MMLU preserved |
-| 15     | 15   | 20     | 512   | -      | -         | -       | -    | -           | -       | -         | Training crashed (cache issue) |
 | 15     | 15   | 50     | 512   | 35.90% | 33.64%    | 36.47%  | 44.81% | 0.26        | 0.09    | 0.25      | Better MMLU, weaker unlearning |

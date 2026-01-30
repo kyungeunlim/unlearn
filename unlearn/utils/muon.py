@@ -65,7 +65,8 @@ class MuonAdamW(torch.optim.Optimizer):
         super().__init__(self.param_groups, {})
 
         print(
-            f"MuonAdamW: {len(muon_params)} Muon params, {len(adam_params)} AdamW params"
+            f"MuonAdamW: {len(muon_params)} Muon params, "
+            f"{len(adam_params)} AdamW params"
         )
 
     def step(self, closure=None):

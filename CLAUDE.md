@@ -16,6 +16,8 @@ Put imports at the top of the file unless you have a very strong need to do othe
 
 Don't use try/except blocks. Use assert statements if absolutely necessary.
 
+Don't write words that aren't initialisms in ALL CAPS.
+
 # Experiment Logs and Unlearning Hyperparameters
 
 When you run a training experiment or hyperparameter tune save the settings and results to a markdown file for the algorithm in the experiment_logs directory. Avoid creating new tables - few tables makes comparison easy. Add the baseline model evaluation results as the first row. Save rows for the settings you are about to test first then add results when available.
@@ -26,9 +28,13 @@ Don't vary the number of training steps on your own initiative.
 
 When you hyperparameter tune an unlearning algorithm your first task is to find the boundary zone between where accuracy drops on both MMLU and WMDP Bio Robust, and where it drops on neither. You second task is to find a good point within that boundary zone - either where both evaluation accuracies drop partway, or where WMDP Bio Robust reduces to random while MMLU is preserved.
 
+Unlearning hyperparameters generally don't transfer between number of training steps. Only comment on this if you find an exception to the rule.
+
+Don't write "Key Findings", "Conclusions", or otherwise add your analysis to the markdown.
+
 # Development
 
-Use `pre-commit run --all-files` if you forget to install pre-commit and it doesn't run in the hook.
+Use `pre-commit run --all-files` if you forget to install precommit and it doesn't run in the hook.
 
 Open a dedicated tmux pane named "claude-commands" to run your commands so the user can monitor them.
 

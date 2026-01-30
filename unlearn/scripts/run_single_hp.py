@@ -22,7 +22,8 @@ def append_to_results(
     """Append a result row to the markdown file."""
     with open(results_file, "a") as f:
         f.write(
-            f"| {orth_coef:.2f} | {remove_coef:.2f} | {wmdp_acc:.4f} | {mmlu_acc:.4f} | {notes} |\n"
+            f"| {orth_coef:.2f} | {remove_coef:.2f} | {wmdp_acc:.4f}"
+            f" | {mmlu_acc:.4f} | {notes} |\n"
         )
 
 
@@ -171,7 +172,8 @@ def main():
 
     print(f"\n[{datetime.now()}] Done!")
     print(
-        f"Results: orth_coef={args.orth_coef}, remove_coef={args.remove_coef}, WMDP={wmdp_acc:.4f}, MMLU={mmlu_acc:.4f}"
+        f"Results: orth_coef={args.orth_coef}, remove_coef={args.remove_coef},"
+        f" WMDP={wmdp_acc:.4f}, MMLU={mmlu_acc:.4f}"
     )
 
 

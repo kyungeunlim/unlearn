@@ -144,10 +144,12 @@ def write_results_header(results_file: str):
         f.write("# Orthogonal Circuit Breaker Tuning Results\n\n")
         f.write(f"Started: {datetime.now().isoformat()}\n\n")
         f.write(
-            "| orth_coef | remove_coef | WMDP (lower=better) | MMLU (higher=better) | Notes |\n"
+            "| orth_coef | remove_coef | WMDP (lower=better) | "
+            "MMLU (higher=better) | Notes |\n"
         )
         f.write(
-            "|-----------|-------------|---------------------|----------------------|-------|\n"
+            "|-----------|-------------|---------------------"
+            "|----------------------|-------|\n"
         )
 
 
@@ -162,7 +164,8 @@ def append_result(
     """Append a result row to the markdown file."""
     with open(results_file, "a") as f:
         f.write(
-            f"| {orth_coef:.2f} | {remove_coef:.2f} | {wmdp_acc:.4f} | {mmlu_acc:.4f} | {notes} |\n"
+            f"| {orth_coef:.2f} | {remove_coef:.2f} | {wmdp_acc:.4f} "
+            f"| {mmlu_acc:.4f} | {notes} |\n"
         )
 
 

@@ -1,12 +1,13 @@
-import argparse
 import csv
 import gc
 import os
-from typing import cast
+from dataclasses import dataclass, field
+from typing import Literal, cast
 
 import torch
 import torch.nn.functional as F
 from peft import LoraConfig, get_peft_model
+from simple_parsing import ArgumentParser
 from torch.utils.data import DataLoader
 from transformers import (
     AutoModelForCausalLM,
@@ -25,13 +26,6 @@ from unlearn.algorithm.online_affine_fitter import (
 )
 from unlearn.utils.unlearning_dataset import get_unlearning_dataset
 from unlearn.utils.worker_utils import get_model_and_tokenizer
-
-
-def unwrap_model(model):
-    """Get the underlying model from DDP/FSDP wrapper if present."""
-    if hasattr(model, "module"):
-        return model.module
-    return model
 
 
 class UnlearningTrainer(Trainer):
@@ -436,7 +430,8 @@ class RRTrainer(UnlearningTrainer):
                 else ("kl" if self.run_args.retain_kl_loss else "mse")
             )
             print(
-                f"retain_loss ({retain_type}): {retain_loss_val:.4f} || cb_loss: {cb_loss_val:.4f}"
+                f"retain_loss ({retain_type}): {retain_loss_val:.4f} "
+                f"|| cb_loss: {cb_loss_val:.4f}"
             )
             if self._last_retain_argmax is not None:
                 print(f"retain_argmax_accuracy: {self._last_retain_argmax:.4f}")
@@ -456,153 +451,72 @@ class RRTrainer(UnlearningTrainer):
         return (loss,) if return_outputs else loss
 
 
+@dataclass
+class CheckpointTransferConfig:
+    num_train_examples: int = 1024
+    unlearn_corrupt: bool = False
+    corrupt_ratio: float = 0.5
+    corrupt_ds: Literal["rewritten", "shuffled"] = "rewritten"
+    wmdp_eval_limit: int | None = None
+    mmlu_agieval_limit: int | None = None
+    lr: float = 1e-3
+    pdbs: int = 4
+    alg: Literal["rr", "lat", "rr-lat"] = "rr"
+    retain_coef: float = 5.0
+    remove_coef: float = 5.0
+    lora_r: float = 16
+    adv_lr: float = 2e-3
+    attack_iters: int = 8
+    lora: bool = True
+    layers: list[int] = field(default_factory=lambda: [5, 10, 15, 20, 25, 30])
+    model_name: str = "EleutherAI/deep-ignorance-unfiltered"
+    save_name: str = ""
+    revision: str = "main"
+    checkpoint_name: str = "EleutherAI/deep-ignorance-pretraining-stage-unfiltered"
+    checkpoint_revision: str = "global_step38144"
+    use_affine: bool = False
+    affine_num_examples: int = 100000
+    eval_affine_mse: bool = False
+    affine_eval_examples: int = 10000
+    upload_affine_to_hub: str | None = None
+    affine_hub_private: bool = False
+    load_affine_from_hub: str | None = None
+    retain_kl_loss: bool = True
+    retain_ce_loss: bool = False
+    epochs: int = 1
+    lr_warmup: bool = False
+    global_batch_size: int = 32
+    hidden_dim: int = 4096
+
+
 if __name__ == "__main__":
     assert torch.cuda.is_available(), "CUDA is not available"
 
-    # Optimization: Utilize half of the CPU cores for dataset mapping
     NUM_PROC = os.cpu_count() // 2
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--num_train_examples", type=int, default=1024)
-    parser.add_argument("--unlearn_corrupt", type=bool, default=False)
-    parser.add_argument("--corrupt_ratio", type=float, default=0.5)
-    parser.add_argument(
-        "--corrupt_ds", type=str, default="rewritten", choices=["rewritten", "shuffled"]
-    )
-    parser.add_argument("--wmdp_eval_limit", type=int, default=None)
-    parser.add_argument("--mmlu_agieval_limit", type=int, default=None)
-    parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--pdbs", type=int, default=None)
-    parser.add_argument(
-        "--alg", type=str, choices=["rr", "lat", "rr-lat"], default="rr"
-    )
-    parser.add_argument(
-        "--retain_coef",
-        type=float,
-        default=None,
-        help="Coefficient for KL divergence retain loss on logits",
-    )
-    parser.add_argument("--remove_coef", type=float, default=None)
-    parser.add_argument("--lora_r", type=float, default=16)
-    parser.add_argument("--adv_lr", type=float, default=2e-3)
-    parser.add_argument("--attack_iters", type=int, default=8)
-    parser.add_argument("--lora", type=bool, default=True)
-    parser.add_argument(
-        "--layers",
-        type=int,
-        nargs="+",
-        default=[5, 10, 15, 20, 25, 30],
-        help="List of layers to target",
-    )
-    parser.add_argument(
-        "--model_name", type=str, default="EleutherAI/deep-ignorance-unfiltered"
-    )
-    parser.add_argument("--save_name", type=str, default="")
-    parser.add_argument("--revision", type=str, default="main")
-    parser.add_argument(
-        "--checkpoint_name",
-        type=str,
-        default="EleutherAI/deep-ignorance-pretraining-stage-unfiltered",
-        help="HF model name for checkpoint model to transfer from",
-    )
-    parser.add_argument(
-        "--checkpoint_revision",
-        type=str,
-        default="global_step38144",
-        help="Revision/commit of checkpoint model",
-    )
-    parser.add_argument(
-        "--use_affine",
-        action="store_true",
-        help="Use affine transform between checkpoint and target model",
-    )
-    parser.add_argument(
-        "--affine_num_examples",
-        type=int,
-        default=100000,
-        help="Number of examples for affine transform training",
-    )
-    parser.add_argument(
-        "--eval_affine_mse",
-        action="store_true",
-        help="Evaluate MSE of affine transforms after training",
-    )
-    parser.add_argument(
-        "--affine_eval_examples",
-        type=int,
-        default=10000,
-        help="Number of examples for affine MSE evaluation",
-    )
-    parser.add_argument(
-        "--upload_affine_to_hub",
-        type=str,
-        default=None,
-        help="HuggingFace repo name to upload affine transforms (e.g., 'username/affine-map')",
-    )
-    parser.add_argument(
-        "--affine_hub_private",
-        action="store_true",
-        help="Make the HuggingFace repo private",
-    )
-    parser.add_argument(
-        "--load_affine_from_hub",
-        type=str,
-        default=None,
-        help="Load pre-trained affine transforms from HuggingFace repo (e.g., 'EleutherAI/affine-checkpoint-transfer')",
-    )
-    parser.add_argument(
-        "--retain_kl_loss",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Use KL divergence on outputs for retain loss (default: True). Use --no_retain_kl_loss for MSE on hidden states.",
-    )
-    parser.add_argument(
-        "--retain_ce_loss",
-        action="store_true",
-        help="Use cross-entropy loss on retain data (standard LM loss). Overrides --retain_kl_loss.",
-    )
-    parser.add_argument(
-        "--epochs",
-        type=int,
-        default=1,
-        help="Number of training epochs (default: 1)",
-    )
-    parser.add_argument(
-        "--lr_warmup",
-        action="store_true",
-        help="Enable learning rate warmup of 10 steps (default: off)",
-    )
-    parser.add_argument(
-        "--global_batch_size",
-        type=int,
-        default=32,
-        help="Global batch size across all GPUs (default: 32)",
-    )
-
-    args = parser.parse_args()
+    parser = ArgumentParser()
+    parser.add_arguments(CheckpointTransferConfig, dest="run_cfg")
+    run_cfg = parser.parse_args().run_cfg
 
     SUPPORTED_MODELS = ["EleutherAI/deep-ignorance-unfiltered"]
     assert (
-        args.model_name in SUPPORTED_MODELS
-    ), f"model_name must be one of {SUPPORTED_MODELS}, got {args.model_name}"
-
-    args.pdbs = 4 if args.pdbs is None else args.pdbs
-    args.retain_coef = 5 if args.retain_coef is None else args.retain_coef
-    args.remove_coef = 5 if args.remove_coef is None else args.remove_coef
-    args.hidden_dim = 4096
+        run_cfg.model_name in SUPPORTED_MODELS
+    ), f"model_name must be one of {SUPPORTED_MODELS}, got {run_cfg.model_name}"
 
     print("Parsed arguments:")
-    for arg, value in vars(args).items():
+    for arg, value in vars(run_cfg).items():
         print(f"{arg}: {value}")
     print()
 
-    model, tokenizer = get_model_and_tokenizer(args.model_name, revision=args.revision)
-    train_dataset = get_unlearning_dataset(args, tokenizer, NUM_PROC)
+    model, tokenizer = get_model_and_tokenizer(
+        run_cfg.model_name, revision=run_cfg.revision
+    )
+    train_dataset = get_unlearning_dataset(run_cfg, tokenizer, NUM_PROC)
 
-    lora_layers_to_transform = [i for i in range(max(args.layers) + 1)]
+    lora_layers_to_transform = [i for i in range(max(run_cfg.layers) + 1)]
 
-    if args.lora:
-        if "OLMo" in args.model_name:
+    if run_cfg.lora:
+        if "OLMo" in run_cfg.model_name:
             target_modules = [
                 "q_proj",
                 "k_proj",
@@ -621,7 +535,7 @@ if __name__ == "__main__":
             ]
 
         lora_config = LoraConfig(
-            r=args.lora_r,
+            r=run_cfg.lora_r,
             lora_alpha=16,
             target_modules=target_modules,
             lora_dropout=0.05,
@@ -638,11 +552,12 @@ if __name__ == "__main__":
     checkpoint_model = None
     affine_transforms = {}
     print(
-        f"Loading checkpoint model: {args.checkpoint_name} @ {args.checkpoint_revision}"
+        f"Loading checkpoint model: {run_cfg.checkpoint_name} @ "
+        f"{run_cfg.checkpoint_revision}"
     )
     checkpoint_model = AutoModelForCausalLM.from_pretrained(
-        args.checkpoint_name,
-        revision=args.checkpoint_revision,
+        run_cfg.checkpoint_name,
+        revision=run_cfg.checkpoint_revision,
         device_map="auto",
         torch_dtype=torch.float16,
     )
@@ -651,20 +566,20 @@ if __name__ == "__main__":
         param.requires_grad = False
 
     # Load or train affine transforms
-    if args.load_affine_from_hub:
+    if run_cfg.load_affine_from_hub:
         import tempfile
 
         from huggingface_hub import hf_hub_download
 
-        print(f"Loading affine transforms from {args.load_affine_from_hub}...")
+        print(f"Loading affine transforms from {run_cfg.load_affine_from_hub}...")
         with tempfile.TemporaryDirectory() as tmpdir:
             weights_path = hf_hub_download(
-                repo_id=args.load_affine_from_hub,
+                repo_id=run_cfg.load_affine_from_hub,
                 filename="affine_transforms.safetensors",
                 local_dir=tmpdir,
             )
             metadata_path = hf_hub_download(
-                repo_id=args.load_affine_from_hub,
+                repo_id=run_cfg.load_affine_from_hub,
                 filename="metadata.json",
                 local_dir=tmpdir,
             )
@@ -678,14 +593,14 @@ if __name__ == "__main__":
             affine_transforms[idx].requires_grad_(False)
         print(f"Loaded affine transforms for layers: {list(affine_transforms.keys())}")
 
-    elif args.use_affine:
+    elif run_cfg.use_affine:
         print("Training affine transforms...")
         affine_transforms = train_affine_transform(
             source_model=checkpoint_model,
             target_model=model,
             dataset=train_dataset,
-            target_layers=args.layers,
-            num_examples=args.affine_num_examples,
+            target_layers=run_cfg.layers,
+            num_examples=run_cfg.affine_num_examples,
             device=model.device if hasattr(model, "device") else "cuda",
         )
         for idx, transform in affine_transforms.items():
@@ -696,64 +611,62 @@ if __name__ == "__main__":
 
         # Evaluate and optionally upload affine transforms
         mse_metrics = None
-        if args.eval_affine_mse or args.upload_affine_to_hub:
+        if run_cfg.eval_affine_mse or run_cfg.upload_affine_to_hub:
             mse_metrics = evaluate_affine_mse(
                 affine_transforms=affine_transforms,
                 source_model=checkpoint_model,
                 target_model=model,
                 dataset=train_dataset,
-                target_layers=args.layers,
-                num_examples=args.affine_eval_examples,
+                target_layers=run_cfg.layers,
+                num_examples=run_cfg.affine_eval_examples,
                 device=model.device if hasattr(model, "device") else "cuda",
             )
             for layer_key, mse_val in mse_metrics.items():
                 print(f"  {layer_key}: {mse_val:.6f}")
 
-        if args.upload_affine_to_hub:
+        if run_cfg.upload_affine_to_hub:
             upload_affine_transforms_to_hub(
                 affine_transforms=affine_transforms,
-                repo_id=args.upload_affine_to_hub,
+                repo_id=run_cfg.upload_affine_to_hub,
                 mse_metrics=mse_metrics,
-                source_model_name=args.checkpoint_name,
-                target_model_name=args.model_name,
+                source_model_name=run_cfg.checkpoint_name,
+                target_model_name=run_cfg.model_name,
                 alpha=0.01,
-                num_training_examples=args.affine_num_examples,
-                private=args.affine_hub_private,
+                num_training_examples=run_cfg.affine_num_examples,
+                private=run_cfg.affine_hub_private,
             )
 
-    # Note: gradient_checkpointing=True saves memory but slows down training (~20-30%).
-    # If you have enough VRAM, set this to False for further speedup.
     world_size = int(os.environ.get("WORLD_SIZE", 1))
-    global_batch_size = args.global_batch_size
-    grad_acc_steps = max(1, global_batch_size // (args.pdbs * world_size))
+    global_batch_size = run_cfg.global_batch_size
+    grad_acc_steps = max(1, global_batch_size // (run_cfg.pdbs * world_size))
 
     print(
-        f"Running with {world_size} GPUs. Per device batch: {args.pdbs}. "
+        f"Running with {world_size} GPUs. Per device batch: {run_cfg.pdbs}. "
         f"Grad Acc steps: {grad_acc_steps}."
     )
 
     training_args = TrainingArguments(
         output_dir="./results",
-        learning_rate=args.lr,
+        learning_rate=run_cfg.lr,
         gradient_accumulation_steps=grad_acc_steps,
-        per_device_train_batch_size=args.pdbs,
-        per_device_eval_batch_size=args.pdbs,
-        num_train_epochs=args.epochs,
+        per_device_train_batch_size=run_cfg.pdbs,
+        per_device_eval_batch_size=run_cfg.pdbs,
+        num_train_epochs=run_cfg.epochs,
         weight_decay=0.01,
         gradient_checkpointing=True,
         fp16=True,
         save_strategy="no",
-        ddp_find_unused_parameters=False,  # Required for Custom loops + PEFT usually
-        warmup_steps=10 if args.lr_warmup else 0,
+        ddp_find_unused_parameters=False,
+        warmup_steps=10 if run_cfg.lr_warmup else 0,
     )
 
     trainer = RRTrainer(
-        args,
+        run_cfg,
         model,
         training_args,
         train_dataset,
         tokenizer,
-        args.layers,
+        run_cfg.layers,
         checkpoint_model=checkpoint_model,
         affine_transforms=affine_transforms,
     )
@@ -761,13 +674,17 @@ if __name__ == "__main__":
     model.train()
     trainer.train()
 
-    if args.lora:
+    if run_cfg.lora:
         model = model.merge_and_unload()
 
-    if args.save_name:
-        if "models/" in args.model_name:
-            args.model_name = args.model_name.replace("models/", "")
-        model.save_pretrained(f"./models/{args.model_name + '_' + args.save_name}")
-        tokenizer.save_pretrained(f"./models/{args.model_name + '_' + args.save_name}")
+    if run_cfg.save_name:
+        if "models/" in run_cfg.model_name:
+            run_cfg.model_name = run_cfg.model_name.replace("models/", "")
+        model.save_pretrained(
+            f"./models/{run_cfg.model_name + '_' + run_cfg.save_name}"
+        )
+        tokenizer.save_pretrained(
+            f"./models/{run_cfg.model_name + '_' + run_cfg.save_name}"
+        )
 
     print("Done :)")

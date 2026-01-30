@@ -9,14 +9,15 @@ For each layer L (from last to first):
 This ensures each layer is verified unlearned with clean inputs from earlier layers.
 """
 
-import argparse
 import os
 from copy import deepcopy
-from typing import cast
+from dataclasses import dataclass
+from typing import Literal, cast
 
 import torch
 import torch.nn.functional as F
 from peft import LoraConfig, get_peft_model
+from simple_parsing import ArgumentParser
 from torch.utils.data import DataLoader
 from transformers import PreTrainedModel, Trainer, TrainingArguments
 from transformers.modeling_utils import unwrap_model
@@ -301,50 +302,31 @@ class SequentialUnlearningTrainer(Trainer):
         return (loss,) if return_outputs else loss
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--num_train_examples", type=int, default=1024)
-    parser.add_argument("--unlearn_corrupt", type=bool, default=False)
-    parser.add_argument("--corrupt_ratio", type=float, default=0.5)
-    parser.add_argument("--corrupt_ds", type=str, default="rewritten")
-    parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--pdbs", type=int, default=4)
-    parser.add_argument("--retain_coef", type=float, default=5.0)
-    parser.add_argument("--remove_coef", type=float, default=10.0)
-    parser.add_argument(
-        "--retain_loss_type",
-        type=str,
-        default="l2",
-        choices=["l2", "kl"],
-        help="Type of retain loss: 'l2' (hidden state L2 norm) or 'kl' (KL divergence on logits)",
-    )
-    parser.add_argument("--lora_r", type=int, default=16)
-    parser.add_argument(
-        "--start_layer",
-        type=int,
-        default=None,
-        help="Layer to start unlearning from (default: last layer)",
-    )
-    parser.add_argument(
-        "--end_layer",
-        type=int,
-        default=8,
-        help="Layer to stop unlearning at (inclusive)",
-    )
-    parser.add_argument(
-        "--layer_step",
-        type=int,
-        default=4,
-        help="Step size between layers (e.g., 4 means unlearn every 4th layer)",
-    )
-    parser.add_argument(
-        "--model_name", type=str, default="EleutherAI/deep-ignorance-unfiltered"
-    )
-    parser.add_argument("--save_name", type=str, default="")
-    parser.add_argument("--revision", type=str, default="main")
-    parser.add_argument("--epochs_per_layer", type=int, default=1)
+@dataclass
+class SequentialUnlearnConfig:
+    num_train_examples: int = 1024
+    unlearn_corrupt: bool = False
+    corrupt_ratio: float = 0.5
+    corrupt_ds: str = "rewritten"
+    lr: float = 1e-3
+    pdbs: int = 4
+    retain_coef: float = 5.0
+    remove_coef: float = 10.0
+    retain_loss_type: Literal["l2", "kl"] = "l2"
+    lora_r: int = 16
+    start_layer: int | None = None
+    end_layer: int = 8
+    layer_step: int = 4
+    model_name: str = "EleutherAI/deep-ignorance-unfiltered"
+    save_name: str = ""
+    revision: str = "main"
+    epochs_per_layer: int = 1
 
-    args = parser.parse_args()
+
+def main():
+    parser = ArgumentParser()
+    parser.add_arguments(SequentialUnlearnConfig, dest="run_cfg")
+    run_cfg = parser.parse_args().run_cfg
 
     assert torch.cuda.is_available(), "CUDA required"
     NUM_PROC = (os.cpu_count() or 32) // 2
@@ -352,12 +334,14 @@ def main():
     print("=" * 60)
     print("Sequential Back-to-Front Unlearning")
     print("=" * 60)
-    for arg, value in vars(args).items():
+    for arg, value in vars(run_cfg).items():
         print(f"  {arg}: {value}")
     print("=" * 60)
 
     # Load model and tokenizer
-    model, tokenizer = get_model_and_tokenizer(args.model_name, revision=args.revision)
+    model, tokenizer = get_model_and_tokenizer(
+        run_cfg.model_name, revision=run_cfg.revision
+    )
 
     # Create a frozen copy for the original model
     print("Creating frozen copy of original model...")
@@ -368,19 +352,19 @@ def main():
 
     # Determine layers to unlearn
     num_layers = model.config.num_hidden_layers
-    if args.start_layer is None:
-        args.start_layer = num_layers - 1
+    if run_cfg.start_layer is None:
+        run_cfg.start_layer = num_layers - 1
 
     layers_to_unlearn = list(
-        range(args.start_layer, args.end_layer - 1, -args.layer_step)
+        range(run_cfg.start_layer, run_cfg.end_layer - 1, -run_cfg.layer_step)
     )
     print(f"Layers to unlearn (back-to-front): {layers_to_unlearn}")
 
     # Setup LoRA
-    print(f"\nUsing LoRA with rank {args.lora_r}")
+    print(f"\nUsing LoRA with rank {run_cfg.lora_r}")
     lora_config = LoraConfig(
-        r=args.lora_r,
-        lora_alpha=args.lora_r,
+        r=run_cfg.lora_r,
+        lora_alpha=run_cfg.lora_r,
         target_modules=None,
         lora_dropout=0.05,
         bias="none",
@@ -393,15 +377,15 @@ def main():
     model.enable_input_require_grads()
 
     # Load dataset
-    train_dataset = get_unlearning_dataset(args, tokenizer, NUM_PROC)
+    train_dataset = get_unlearning_dataset(run_cfg, tokenizer, NUM_PROC)
 
     world_size = int(os.environ.get("WORLD_SIZE", 1))
     global_batch_size = 32
-    grad_acc_steps = max(1, global_batch_size // (args.pdbs * world_size))
+    grad_acc_steps = max(1, global_batch_size // (run_cfg.pdbs * world_size))
 
     print(
         f"\nRunning with {world_size} GPUs. Per device batch: "
-        f"{args.pdbs}. Grad Acc: {grad_acc_steps}."
+        f"{run_cfg.pdbs}. Grad Acc: {grad_acc_steps}."
     )
 
     # Sequential unlearning: back to front
@@ -412,11 +396,11 @@ def main():
 
         training_args = TrainingArguments(
             output_dir=f"./results/layer_{layer_idx}",
-            learning_rate=args.lr,
+            learning_rate=run_cfg.lr,
             gradient_accumulation_steps=grad_acc_steps,
-            per_device_train_batch_size=args.pdbs,
-            per_device_eval_batch_size=args.pdbs,
-            num_train_epochs=args.epochs_per_layer,
+            per_device_train_batch_size=run_cfg.pdbs,
+            per_device_eval_batch_size=run_cfg.pdbs,
+            num_train_epochs=run_cfg.epochs_per_layer,
             weight_decay=0.01,
             gradient_checkpointing=True,
             bf16=True,
@@ -426,7 +410,7 @@ def main():
         )
 
         trainer = SequentialUnlearningTrainer(
-            run_args=args,
+            run_args=run_cfg,
             model=model,
             original_model=original_model,
             args=training_args,
@@ -444,8 +428,10 @@ def main():
     print("\nMerging LoRA weights...")
     model = model.merge_and_unload()
 
-    if args.save_name:
-        save_path = f"./models/{args.model_name.replace('/', '_')}_{args.save_name}"
+    if run_cfg.save_name:
+        save_path = (
+            f"./models/{run_cfg.model_name.replace('/', '_')}_{run_cfg.save_name}"
+        )
         print(f"Saving model to: {save_path}")
         model.save_pretrained(save_path)
         tokenizer.save_pretrained(save_path)

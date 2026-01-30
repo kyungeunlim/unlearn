@@ -1,12 +1,13 @@
 # A base script for prototyping unlearning methods.
 # Uses Cas's circuit breakers implementation with DDP enabled.
 
-import argparse
 import os
-from typing import Dict, cast
+from dataclasses import dataclass, field
+from typing import Dict, Literal, cast
 
 import torch
 from peft import LoraConfig, get_peft_model
+from simple_parsing import ArgumentParser
 from torch import nn
 from torch.utils.data import DataLoader
 from transformers import PreTrainedModel, Trainer, TrainingArguments
@@ -47,7 +48,8 @@ class UnlearningTrainer(Trainer):
         self.trainer_tokenizer = tokenizer
 
         # --- Resolve Layer Names for Hooks ---
-        # We need to map integer indices (e.g., 5) to module names (e.g., "model.layers.5")
+        # We need to map integer indices (e.g., 5) to module
+        # names (e.g., "model.layers.5")
         self.layer_id_to_name = self._resolve_layer_names(model, lora_target_layers)
         self.target_module_names = list(self.layer_id_to_name.values())
 
@@ -94,7 +96,8 @@ class UnlearningTrainer(Trainer):
 
         mapping = {}
         # We need the prefix required to reach 'base' from 'unwrapped'
-        # To do this safely, we just iterate the full unwrapped model and find the matching suffix.
+        # To do this safely, we just iterate the full unwrapped model
+        # and find the matching suffix.
 
         found_count = 0
         target_indices = set(layer_indices)
@@ -115,7 +118,8 @@ class UnlearningTrainer(Trainer):
 
         if len(mapping) != len(target_indices):
             print(
-                f"Warning: requested {len(target_indices)} layers, but found {len(mapping)}."
+                f"Warning: requested {len(target_indices)} layers, "
+                f"but found {len(mapping)}."
             )
 
         return mapping
@@ -222,8 +226,10 @@ class RRTrainer(UnlearningTrainer):
                     )
                     orig_retain_hidden *= broadcast_retain_mask
 
-                # Clear activations to free memory before next pass, but keep hooks if needed
-                # Actually simpler to just capture both if memory allows, but separating is safer
+                # Clear activations to free memory before next pass, but
+                # keep hooks if needed
+                # Actually simpler to just capture both if memory allows, but
+                # separating is safer
                 capturer.activations = {}
 
                 ### Circuit Breaker control
@@ -318,62 +324,53 @@ class RRTrainer(UnlearningTrainer):
         return (loss,) if return_outputs else loss
 
 
+@dataclass
+class BaseUnlearnConfig:
+    num_train_examples: int = 1024
+    unlearn_corrupt: bool = False
+    corrupt_ratio: float = 0.5
+    corrupt_ds: Literal["rewritten", "shuffled"] = "rewritten"
+    lr: float = 1e-3
+    pdbs: int = 4
+    alg: Literal["rr", "lat", "rr-lat"] = "rr"
+    retain_coef: float = 5.0
+    remove_coef: float = 5.0
+    lora_r: float = 16
+    adv_lr: float = 2e-3
+    attack_iters: int = 8
+    lora: bool = True
+    layers: list[int] = field(default_factory=lambda: [5, 10, 15, 20, 25, 30])
+    model_name: str = "EleutherAI/deep-ignorance-unfiltered"
+    save_name: str = ""
+    revision: str = "main"
+    hidden_dim: int = 4096
+
+
 if __name__ == "__main__":
     assert torch.cuda.is_available(), "CUDA is not available"
 
     NUM_PROC = (os.cpu_count() or 32) // 2
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--num_train_examples", type=int, default=1024)
-    parser.add_argument("--unlearn_corrupt", type=bool, default=False)
-    parser.add_argument("--corrupt_ratio", type=float, default=0.5)
-    parser.add_argument(
-        "--corrupt_ds", type=str, default="rewritten", choices=["rewritten", "shuffled"]
-    )
-    parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--pdbs", type=int, default=None)
-    parser.add_argument(
-        "--alg", type=str, choices=["rr", "lat", "rr-lat"], default="rr"
-    )
-    parser.add_argument("--retain_coef", type=float, default=None)
-    parser.add_argument("--remove_coef", type=float, default=None)
-    parser.add_argument("--lora_r", type=float, default=16)
-    parser.add_argument("--adv_lr", type=float, default=2e-3)
-    parser.add_argument("--attack_iters", type=int, default=8)
-    parser.add_argument("--lora", type=bool, default=True)
-    parser.add_argument(
-        "--layers",
-        type=int,
-        nargs="+",
-        default=[5, 10, 15, 20, 25, 30],
-        help="List of layers to target",
-    )
-    parser.add_argument(
-        "--model_name", type=str, default="EleutherAI/deep-ignorance-unfiltered"
-    )
-    parser.add_argument("--save_name", type=str, default="")
-    parser.add_argument("--revision", type=str, default="main")
-
-    args = parser.parse_args()
-    args.pdbs = 4 if args.pdbs is None else args.pdbs
-    args.retain_coef = 5 if args.retain_coef is None else args.retain_coef
-    args.remove_coef = 5 if args.remove_coef is None else args.remove_coef
-    args.hidden_dim = 4096
+    parser = ArgumentParser()
+    parser.add_arguments(BaseUnlearnConfig, dest="run_cfg")
+    run_cfg = parser.parse_args().run_cfg
 
     print("Parsed arguments:")
-    for arg, value in vars(args).items():
+    for arg, value in vars(run_cfg).items():
         print(f"{arg}: {value}")
     print()
 
-    model, tokenizer = get_model_and_tokenizer(args.model_name, revision=args.revision)
+    model, tokenizer = get_model_and_tokenizer(
+        run_cfg.model_name, revision=run_cfg.revision
+    )
 
-    train_dataset = get_unlearning_dataset(args, tokenizer, NUM_PROC)
+    train_dataset = get_unlearning_dataset(run_cfg, tokenizer, NUM_PROC)
 
-    lora_layers_to_transform = [i for i in range(max(args.layers) + 1)]
+    lora_layers_to_transform = [i for i in range(max(run_cfg.layers) + 1)]
 
-    if args.lora:
+    if run_cfg.lora:
         lora_config = LoraConfig(
-            r=args.lora_r,
+            r=run_cfg.lora_r,
             lora_alpha=16,
             target_modules=(
                 [
@@ -385,7 +382,7 @@ if __name__ == "__main__":
                     "up_proj",
                     "down_proj",
                 ]
-                if "OLMo" in args.model_name
+                if "OLMo" in run_cfg.model_name
                 else None
             ),
             lora_dropout=0.05,
@@ -400,42 +397,45 @@ if __name__ == "__main__":
 
     world_size = int(os.environ.get("WORLD_SIZE", 1))
     global_batch_size = 32
-    grad_acc_steps = max(1, global_batch_size // (args.pdbs * world_size))
+    grad_acc_steps = max(1, global_batch_size // (run_cfg.pdbs * world_size))
 
     print(
-        f"Running with {world_size} GPUs. Per device batch: {args.pdbs}. "
+        f"Running with {world_size} GPUs. Per device batch: {run_cfg.pdbs}. "
         f"Grad Acc steps: {grad_acc_steps}."
     )
 
     training_args = TrainingArguments(
         output_dir="./results",
-        learning_rate=args.lr,
+        learning_rate=run_cfg.lr,
         gradient_accumulation_steps=grad_acc_steps,
-        per_device_train_batch_size=args.pdbs,
-        per_device_eval_batch_size=args.pdbs,
+        per_device_train_batch_size=run_cfg.pdbs,
+        per_device_eval_batch_size=run_cfg.pdbs,
         num_train_epochs=1,
         weight_decay=0.01,
         gradient_checkpointing=True,
         fp16=True,
         save_strategy="no",
-        # Required for Custom loops
         ddp_find_unused_parameters=False,
     )
 
     trainer = RRTrainer(
-        args, model, training_args, train_dataset, tokenizer, args.layers
+        run_cfg, model, training_args, train_dataset, tokenizer, run_cfg.layers
     )
 
     model.train()
     trainer.train()
 
-    if args.lora:
+    if run_cfg.lora:
         model = model.merge_and_unload()  # type: ignore
 
-    if args.save_name:
-        if "models/" in args.model_name:
-            args.model_name = args.model_name.replace("models/", "")
-        model.save_pretrained(f"./models/{args.model_name + '_' + args.save_name}")
-        tokenizer.save_pretrained(f"./models/{args.model_name + '_' + args.save_name}")
+    if run_cfg.save_name:
+        if "models/" in run_cfg.model_name:
+            run_cfg.model_name = run_cfg.model_name.replace("models/", "")
+        model.save_pretrained(
+            f"./models/{run_cfg.model_name + '_' + run_cfg.save_name}"
+        )
+        tokenizer.save_pretrained(
+            f"./models/{run_cfg.model_name + '_' + run_cfg.save_name}"
+        )
 
     print("Done :)")

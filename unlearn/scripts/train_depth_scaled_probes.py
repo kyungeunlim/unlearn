@@ -222,7 +222,8 @@ def train_probe(
         avg_eval_mse = eval_mse / eval_tokens
 
         print(
-            f"  Epoch {epoch+1}: train_loss={avg_train_loss:.6f}, eval_mse={avg_eval_mse:.6f}"
+            f"  Epoch {epoch+1}: train_loss={avg_train_loss:.6f}, "
+            f"eval_mse={avg_eval_mse:.6f}"
         )
 
         wandb.log(

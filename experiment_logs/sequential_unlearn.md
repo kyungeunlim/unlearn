@@ -2,6 +2,8 @@
 
 Sequential back-to-front unlearning: for each layer L (from last to first), use the original model's layers L→N as a "probe" to compute forget loss while retaining performance on retain data by taking a retain loss through the updated model.
 
+Note that hyperparameters don't transfer between number of training steps.
+
 ## Method
 
 **Training**: LoRA fine-tuning (not full SFT)
@@ -19,46 +21,37 @@ Sequential back-to-front unlearning: for each layer L (from last to first), use 
 
 ## Experiments
 
-| Run | Layers | remove_coef | retain_coef | WMDP Bio Robust | MMLU | Notes |
-|-----|--------|-------------|-------------|-----------------|------|-------|
-| - | - | - | - | 0.4297 | 0.4510 | Baseline |
-| 1 | 28→16 (step 4) | 10 | 5 | 0.3134 | 0.4479 | |
-| 2 | 28→16 (step 4) | 20 | 5 | 0.3076 | 0.4454 | |
-| 3 | 28→16 (step 4) | 30 | 5 | 0.2995 | 0.4458 | |
-| 4 | 28→16 (step 4) | 40 | 5 | 0.2961 | 0.4410 | |
-| 5 | 28→16 (step 4) | 50 | 5 | 0.2684 | 0.4437 | Below random (0.25) |
+### L2 Norm Retain Loss
 
-## Retain Loss Ablation
+| Run | Layers | remove_coef | retain_coef | Steps | WMDP Bio Robust | MMLU | Notes |
+|-----|--------|-------------|-------------|-------|-----------------|------|-------|
+| - | - | - | - | - | 0.4297 | 0.4510 | Baseline |
+| 1 | 28→16 (step 4) | 10 | 5 | 128 | 0.3134 | 0.4479 | |
+| 2 | 28→16 (step 4) | 20 | 5 | 128 | 0.3076 | 0.4454 | |
+| 3 | 28→16 (step 4) | 30 | 5 | 128 | 0.2995 | 0.4458 | |
+| 4 | 28→16 (step 4) | 40 | 5 | 128 | 0.2961 | 0.4410 | |
+| 5 | 28→16 (step 4) | 50 | 5 | 128 | **0.2684** | **0.4437** | Below random (0.25) |
+| 6 | 28→16 (step 4) | 50 | 5 | 1280 | 0.2535 | 0.2540 | 10x examples, MMLU collapsed |
 
-### L2 vs KL with same hyperparameters (rm50, ret5)
+### KL Retain Loss
 
-| retain_loss_type | WMDP Bio Robust | MMLU | Notes |
-|------------------|-----------------|------|-------|
-| -                | 0.4297          | 0.4510 | Baseline |
-| L2 (hidden states) | 0.2684 | 0.4437 | Best L2 |
-| KL (logits) | 0.2673 | 0.2295 | MMLU collapsed |
-
-### KL hyperparameter sweep (requires different tuning)
-
-| remove_coef | retain_coef | WMDP Bio Robust | MMLU | Notes |
-|-------------|-------------|-----------------|------|-------|
-| - | - | 0.4297 | 0.4510 | Baseline |
-| 50 | 5 | 0.2673 | 0.2295 | Collapsed |
-| 20 | 10 | 0.2673 | - | Collapsed |
-| 30 | 10 | 0.2673 | - | Collapsed |
-| 20 | 20 | 0.2673 | 0.2295 | Collapsed |
-| 10 | 20 | 0.2673 | - | Collapsed |
-| 10 | 50 | 0.2673 | 0.2295 | Collapsed |
-| 5 | 50 | 0.2730 | 0.4034 | Works |
-| 5 | 100 | 0.2788 | 0.4195 | Best KL |
-
-**Conclusion**: KL divergence requires ~10-20x higher retain_coef and ~10x lower remove_coef compared to L2. With proper tuning (rm5/ret100), KL achieves comparable results to L2 (rm50/ret5).
+| Run | Layers | remove_coef | retain_coef | Steps | WMDP Bio Robust | MMLU | Notes |
+|-----|--------|-------------|-------------|-------|-----------------|------|-------|
+| - | - | - | - | - | 0.4297 | 0.4510 | Baseline |
+| 1 | 28→16 (step 4) | 50 | 5 | 128 | 0.2673 | 0.2295 | Collapsed |
+| 2 | 28→16 (step 4) | 20 | 10 | 128 | 0.2673 | - | Collapsed |
+| 3 | 28→16 (step 4) | 30 | 10 | 128 | 0.2673 | - | Collapsed |
+| 4 | 28→16 (step 4) | 20 | 20 | 128 | 0.2673 | 0.2295 | Collapsed |
+| 5 | 28→16 (step 4) | 10 | 20 | 128 | 0.2673 | - | Collapsed |
+| 6 | 28→16 (step 4) | 10 | 50 | 128 | 0.2673 | 0.2295 | Collapsed |
+| 7 | 28→16 (step 4) | 5 | 50 | 128 | 0.2730 | 0.4034 | Works |
+| 8 | 28→16 (step 4) | 5 | 100 | 128 | **0.2788** | **0.4195** | Best KL |
+| 9 | 28→16 (step 4) | 5 | 100 | 1280 | 0.2673 | 0.2295 | 10x examples |
 
 ## Hyperparameters (all runs)
 
 | Parameter | Value |
 |-----------|-------|
-| num_train_examples | 1024 |
 | per_device_batch_size | 4 |
 | gradient_accumulation | 2 |
 | global_batch_size | 32 |
@@ -70,18 +63,6 @@ Sequential back-to-front unlearning: for each layer L (from last to first), use 
 | bf16 | True |
 | gradient_checkpointing | True |
 
-## Longer Training (10x examples)
-
-Training with 10240 examples instead of 1024:
-
-| Model | WMDP Bio Robust | MMLU | Notes |
-|-------|-----------------|------|-------|
-| Baseline (target) | 0.4297 | 0.4510 | - |
-| L2 (rm50/ret5) | 0.2535 | 0.2540 | MMLU collapsed (was 0.44 at 1x) |
-| KL (rm5/ret100) | 0.2673 | 0.2295 | No improvement |
-
-**Conclusion**: 10x longer training destroys capabilities for both methods. Hyperparameters don't transfer - would need much lower remove_coef for longer training.
-
 ## Tampering Attack Results
 
 Fine-tuning unlearned models on WMDP-Bio-Remove dataset to test recovery:
@@ -92,16 +73,5 @@ Fine-tuning unlearned models on WMDP-Bio-Remove dataset to test recovery:
 | L2 (rm50/ret5) | 0.2696 | 0.4055 | 0.4182 |
 | KL (rm5/ret100) | 0.2788 | 0.4078 | 0.4217 |
 
-Both models show rapid recovery (~10 steps) back to near-baseline WMDP accuracy.
+Both models show rapid recovery (~10 steps).
 Plots saved in `runs/tamper_attack/` and `runs/tamper_kl_rm5_ret100/`.
-
-## Key Findings
-
-1. Higher remove_coef pushes WMDP closer to (and below) random chance
-2. MMLU degradation remains minimal even at rm50 (~1% drop from baseline)
-3. Best L2 result: rm50/ret5 achieves 0.2684 WMDP with 0.4437 MMLU
-4. Random chance for 4-way MCQ is 0.25
-5. KL divergence requires very different hyperparameters than L2 (~10-20x higher retain, ~10x lower remove)
-6. Best KL result: rm5/ret100 achieves 0.2788 WMDP with 0.4195 MMLU
-7. Both L2 and KL models are equally vulnerable to tampering attacks
-8. **Training 10x longer destroys capabilities** - hyperparameters must be retuned for longer training

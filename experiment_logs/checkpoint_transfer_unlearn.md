@@ -14,24 +14,20 @@
 
 Finding the latest checkpoint with near-random WMDP Bio performance:
 
-| Checkpoint | WMDP Bio | MMLU STEM (deprecated) | Notes |
-|------------|----------|-----------|-------|
-| global_step38144 | 24.19% | 27.78% | Current source |
-| global_step50064 | 25.23% | - | ~Random |
-| global_step54832 | 26.50% | 28.39% | ~Random (latest viable) |
-| global_step57216 | 29.03% | - | Learning starts |
-| global_step60792 | 30.41% | - | |
-| global_step70328 | 33.76% | - | |
-| global_step81056 | 34.10% | - | |
-| global_step91784 | 38.02% | - | |
+| Checkpoint | WMDP Robust | MMLU | Notes |
+|------------|-------------|------|-------|
+| global_step38144 | 24.19% | 27.93% | Current source |
+| global_step50064 | 25.23% | 28.77% | ~Random |
+| global_step54832 | 26.50% | 29.08% | ~Random (latest viable) |
+| global_step57216 | - | - | Learning starts |
 
-**Recommendation:** global_step54832 is ~17k steps further into training but still has effectively random WMDP performance. Affine transforms available at `EleutherAI/affine-checkpoint-transfer-step54832`.
+Affine transforms for global_step54832 available at `EleutherAI/affine-checkpoint-transfer-step54832`.
 
 ## Notes
 
 - Higher remove_coef = stronger push towards checkpoint activations (more unlearning)
 - Higher retain_coef = stronger KL divergence preservation (less capability loss)
-- Looking for the sweet spot where WMDP drops but MMLU stays high
+- Looking for the sweet spot where WMDP drops but MMLU stays high, or alternatively failure spot where both drop but not all the way to 25% acc/random.
 
 ## Runs
 
@@ -99,14 +95,14 @@ Finding the latest checkpoint with near-random WMDP Bio performance:
 
 **MMLU threshold:** >= 0.4275 (1% below baseline of 0.4375)
 
-| Job ID | retain_coef | remove_coef | Steps | retain_kl_loss | cb_loss | WMDP Bio | WMDP Robust | MMLU |
-|--------|-------------|-------------|-------|----------------|---------|----------|-------------|------|
-| Baseline | - | - | - | - | - | 42.97% | 42.97% | 45.10% |
-| 2042137 | 15 | 5 | 512 | 0.0027 | 0.7393 | - | 0.3894 | 0.4322 |
-| 2042650 | 10 | 5 | 512 | 0.0037 | 0.7392 | - | 0.3779 | 0.4312 |
-| 2042651 | 5 | 5 | 512 | 0.0062 | 0.7397 | - | 0.3779 | 0.4302 |
-| 2042935 | 2 | 5 | 512 | 0.0125 | 0.7477 | - | 0.3698 | 0.4235 |
-| 2042936 | 1 | 5 | 512 | 0.0200 | 0.7386 | - | 0.3721 | 0.4202 |
+| Job ID | retain_coef | remove_coef | Steps | retain_kl_loss | cb_loss | WMDP Robust | MMLU |
+|--------|-------------|-------------|-------|----------------|---------|-------------|------|
+| Baseline | - | - | - | - | - | 42.97% | 45.10% |
+| 2042137 | 15 | 5 | 512 | 0.0027 | 0.7393 | 0.3894 | 0.4322 |
+| 2042650 | 10 | 5 | 512 | 0.0037 | 0.7392 | 0.3779 | 0.4312 |
+| 2042651 | 5 | 5 | 512 | 0.0062 | 0.7397 | 0.3779 | 0.4302 |
+| 2042935 | 2 | 5 | 512 | 0.0125 | 0.7477 | 0.3698 | 0.4235 |
+| 2042936 | 1 | 5 | 512 | 0.0200 | 0.7386 | 0.3721 | 0.4202 |
 
 ### Observations
 - **Minimum retain_coef for <1% MMLU drop: 5** (MMLU=0.4302, -0.73%)
@@ -117,10 +113,10 @@ Finding the latest checkpoint with near-random WMDP Bio performance:
 
 ## Higher Remove Coef Exploration
 
-| Job ID | retain_coef | remove_coef | Steps | retain_kl_loss | cb_loss | WMDP Bio | WMDP Robust | MMLU |
-|--------|-------------|-------------|-------|----------------|---------|----------|-------------|------|
-| Baseline | - | - | - | - | - | 42.97% | 42.97% | 45.10% |
-| 2043897 | 1 | 12 | 512 | - | - | - | 0.3468 | 0.4143 |
+| Job ID | retain_coef | remove_coef | Steps | retain_kl_loss | cb_loss | WMDP Robust | MMLU |
+|--------|-------------|-------------|-------|----------------|---------|-------------|------|
+| Baseline | - | - | - | - | - | 42.97% | 45.10% |
+| 2043897 | 1 | 12 | 512 | - | - | 0.3468 | 0.4143 |
 
 **Observation:** Higher remove_coef (12 vs 5) with low retain_coef (1) achieves stronger unlearning (WMDP 0.3468 vs 0.3721) but at cost of 2.3% MMLU drop.
 
@@ -132,3 +128,46 @@ Finding the latest checkpoint with near-random WMDP Bio performance:
 | ret1_rm5_512 | 37.2% | 41.9% | 42.9% | Full recovery by step 10 |
 
 **Conclusion:** Unlearning is easily reversed with small amount of finetuning on bio data. Both models recover to baseline (~43%) within 10-30 finetuning steps.
+
+## KL Retain Loss Epoch Sweep
+
+**Goal:** Find the boundary between minimal capability impact and noticeable damage, varying training length.
+
+**Settings** (differences from fixed settings above):
+- `num_train_examples`: 1024
+- Batch size: 4 per device, grad accumulation 2 (effective batch 32)
+
+### 1 Epoch (32 steps)
+
+| retain_coef | remove_coef | retain_kl_loss | cb_loss | WMDP Robust | MMLU |
+|-------------|-------------|----------------|---------|-------------|------|
+| -           | -           | -              | -       | 42.97%      | 45.10% |
+| 1           | 3           | 0.247          | 6.30    | 29.95%      | 33.64% |
+| 5           | 5           | 0.156          | 6.31    | 31.80%      | 35.81% |
+
+### 10 Epochs (320 steps)
+
+| retain_coef | remove_coef | retain_kl_loss | cb_loss | WMDP Bio (↓) | MMLU |
+|-------------|-------------|----------------|---------|--------------|------|
+| -           | -           | -              | -       | 42.97%       | 45.10% |
+| 5           | 8           | 0.025          | 3.21    | 30.99%       | 34.73% |
+
+### 100 Epochs (3200 steps)
+
+| retain_coef | remove_coef | retain_kl_loss | cb_loss | WMDP Robust | MMLU |
+|-------------|-------------|----------------|---------|-------------|------|
+| -           | -           | -              | -       | 42.97%      | 45.10% |
+| 5           | 8           | 0.022          | 2.44    | 29.38%      | 31.66% |
+
+
+### Epoch Sweep Observations
+- **Longer training significantly reduces losses**: cb_loss drops from ~6.3 (1ep) to ~4.1 (4ep) to ~3.2 (10ep)
+- **retain_kl_loss decreases with more training**: 0.15-0.25 → 0.04-0.09 → 0.025
+- **However, longer training does not improve unlearning** - WMDP Bio stays at ~30-31% regardless
+- **10 epochs (320 steps)**: WMDP Bio 30.99%, MMLU 34.87% - no improvement over 1 epoch
+
+### Epoch Sweep Conclusions
+1. **KL divergence retain loss works** but unlearning incomplete at all settings
+2. **1 epoch is sufficient** - longer training does not improve unlearning
+
+All models saved to `models/EleutherAI/deep-ignorance-unfiltered_kl_ret{X}_rm{Y}[_ep4]`.

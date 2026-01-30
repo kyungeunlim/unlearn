@@ -1,16 +1,16 @@
 """Unlearning via entropy maximization at frozen tuned lens layers."""
 
-import argparse
 import os
-from typing import cast
+from dataclasses import dataclass, field
+from typing import Literal, cast
 
 import torch
 import torch.nn.functional as F
 from accelerate.hooks import remove_hook_from_module
 from peft import LoraConfig, get_peft_model
+from simple_parsing import ArgumentParser
 from torch.utils.data import DataLoader
 from transformers import PreTrainedModel, Trainer, TrainingArguments
-from transformers.modeling_utils import unwrap_model
 from transformers.trainer_utils import seed_worker
 from tuned_lens import TunedLens
 
@@ -167,8 +167,10 @@ class RRTrainer(UnlearningTrainer):
         if circuit_breaker_coeff > 0:
             lora_circuit_breaker_outputs = unwrapped_model(**cb_inputs_dict)[module]
 
-            # Use cross-entropy with random targets as memory-efficient entropy proxy
-            # Minimizing CE against random tokens spreads probability mass -> maximizes entropy
+            # Use cross-entropy with random targets as memory-efficient
+            # entropy proxy
+            # Minimizing CE against random tokens spreads probability
+            # mass -> maximizes entropy
             layer_losses = []
             lens_device = next(self.lens.parameters()).device
             for layer_idx in self.lora_target_layers:
@@ -235,69 +237,56 @@ class RRTrainer(UnlearningTrainer):
         return (loss,) if return_outputs else loss
 
 
+@dataclass
+class LensUnlearnConfig:
+    num_train_examples: int = 1024
+    unlearn_corrupt: bool = False
+    corrupt_ratio: float = 0.5
+    corrupt_ds: Literal["rewritten", "shuffled"] = "rewritten"
+    wmdp_eval_limit: int | None = None
+    mmlu_agieval_limit: int | None = None
+    lr: float = 1e-3
+    pdbs: int = 4
+    retain_coef: float = 5.0
+    remove_coef: float = 5.0
+    lora_r: float = 16
+    lora: bool = True
+    layers: list[int] = field(default_factory=lambda: [5, 10, 15, 20, 25, 30])
+    model_name: str = "EleutherAI/deep-ignorance-unfiltered"
+    save_name: str = ""
+    revision: str = "main"
+    lens_path: str = ""
+    skip_eval: bool = False
+    epochs: int = 1
+
+
 if __name__ == "__main__":
     assert torch.cuda.is_available(), "CUDA is not available"
 
-    # Optimization: Utilize half of the CPU cores for dataset mapping
     NUM_PROC = (os.cpu_count() or 32) // 2
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--num_train_examples", type=int, default=1024)
-    parser.add_argument("--unlearn_corrupt", type=bool, default=False)
-    parser.add_argument("--corrupt_ratio", type=float, default=0.5)
-    parser.add_argument(
-        "--corrupt_ds", type=str, default="rewritten", choices=["rewritten", "shuffled"]
-    )
-    parser.add_argument("--wmdp_eval_limit", type=int, default=None)
-    parser.add_argument("--mmlu_agieval_limit", type=int, default=None)
-    parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--pdbs", type=int, default=4)
-    parser.add_argument("--retain_coef", type=float, default=5.0)
-    parser.add_argument("--remove_coef", type=float, default=5.0)
-    parser.add_argument("--lora_r", type=float, default=16)
-    parser.add_argument("--lora", type=bool, default=True)
-    parser.add_argument(
-        "--layers",
-        type=int,
-        nargs="+",
-        default=[5, 10, 15, 20, 25, 30],
-        help="List of layers to target",
-    )
-    parser.add_argument(
-        "--model_name", type=str, default="EleutherAI/deep-ignorance-unfiltered"
-    )
-    parser.add_argument("--save_name", type=str, default="")
-    parser.add_argument("--revision", type=str, default="main")
-    parser.add_argument(
-        "--lens_path", type=str, required=True, help="Path to tuned lens weights"
-    )
-    parser.add_argument(
-        "--skip_eval",
-        action="store_true",
-        help="Skip final evaluation (for faster tuning)",
-    )
-    parser.add_argument(
-        "--epochs", type=int, default=1, help="Number of training epochs"
-    )
+    parser = ArgumentParser()
+    parser.add_arguments(LensUnlearnConfig, dest="run_cfg")
+    run_cfg = parser.parse_args().run_cfg
 
-    args = parser.parse_args()
-
-    if "smollm2" in args.model_name:
-        args.layers = [l for l in args.layers if l < 24]
+    if "smollm2" in run_cfg.model_name:
+        run_cfg.layers = [l for l in run_cfg.layers if l < 24]
 
     print("Parsed arguments:")
-    for arg, value in vars(args).items():
+    for arg, value in vars(run_cfg).items():
         print(f"{arg}: {value}")
     print()
 
-    model, tokenizer = get_model_and_tokenizer(args.model_name, revision=args.revision)
-    train_dataset = get_unlearning_dataset(args, tokenizer, NUM_PROC)
+    model, tokenizer = get_model_and_tokenizer(
+        run_cfg.model_name, revision=run_cfg.revision
+    )
+    train_dataset = get_unlearning_dataset(run_cfg, tokenizer, NUM_PROC)
 
     # Load frozen tuned lens
-    print(f"Loading tuned lens from: {args.lens_path}")
+    print(f"Loading tuned lens from: {run_cfg.lens_path}")
     device = next(model.parameters()).device
     lens = TunedLens.from_model(model, bias=True)
-    lens_state_dict = torch.load(f"{args.lens_path}/params.pt", map_location=device)
+    lens_state_dict = torch.load(f"{run_cfg.lens_path}/params.pt", map_location=device)
 
     # Map saved keys (e.g., "0.weight") to expected keys
     # (e.g., "layer_translators.0.weight")
@@ -331,11 +320,11 @@ if __name__ == "__main__":
         param.requires_grad = False
     print(f"Loaded lens with {len(lens)} layer translators (frozen)")
 
-    lora_layers_to_transform = [i for i in range(max(args.layers) + 1)]
+    lora_layers_to_transform = [i for i in range(max(run_cfg.layers) + 1)]
 
-    if args.lora:
+    if run_cfg.lora:
         lora_config = LoraConfig(
-            r=args.lora_r,
+            r=run_cfg.lora_r,
             lora_alpha=16,
             target_modules=(
                 [
@@ -347,7 +336,7 @@ if __name__ == "__main__":
                     "up_proj",
                     "down_proj",
                 ]
-                if "OLMo" in args.model_name
+                if "OLMo" in run_cfg.model_name
                 else None
             ),
             lora_dropout=0.05,
@@ -361,47 +350,54 @@ if __name__ == "__main__":
     model = cast(PreTrainedModel, model)
     model.enable_input_require_grads()
 
-    # Note: gradient_checkpointing=True saves memory but slows down training (~20-30%).
-    # If you have enough VRAM, set this to False for further speedup.
     world_size = int(os.environ.get("WORLD_SIZE", 1))
     global_batch_size = 32
-    # Ensure accumulation is at least 1
-    grad_acc_steps = max(1, global_batch_size // (args.pdbs * world_size))
+    grad_acc_steps = max(1, global_batch_size // (run_cfg.pdbs * world_size))
 
     print(
-        f"Running with {world_size} GPUs. Per device batch: {args.pdbs}. "
+        f"Running with {world_size} GPUs. Per device batch: {run_cfg.pdbs}. "
         f"Grad Acc steps: {grad_acc_steps}."
     )
 
     training_args = TrainingArguments(
         output_dir="./results",
-        learning_rate=args.lr,
+        learning_rate=run_cfg.lr,
         gradient_accumulation_steps=grad_acc_steps,
-        per_device_train_batch_size=args.pdbs,
-        per_device_eval_batch_size=args.pdbs,
-        num_train_epochs=args.epochs,
+        per_device_train_batch_size=run_cfg.pdbs,
+        per_device_eval_batch_size=run_cfg.pdbs,
+        num_train_epochs=run_cfg.epochs,
         weight_decay=0.01,
         gradient_checkpointing=True,
         bf16=True,
         max_grad_norm=1.0,
         save_strategy="no",
-        ddp_find_unused_parameters=False,  # Required for Custom loops + PEFT usually
+        ddp_find_unused_parameters=False,
     )
 
     trainer = RRTrainer(
-        args, model, training_args, train_dataset, tokenizer, args.layers, lens=lens
+        run_cfg,
+        model,
+        training_args,
+        train_dataset,
+        tokenizer,
+        run_cfg.layers,
+        lens=lens,
     )
 
     model.train()
     trainer.train()
 
-    if args.lora:
+    if run_cfg.lora:
         model = model.merge_and_unload()  # type: ignore
 
-    if args.save_name:
-        if "models/" in args.model_name:
-            args.model_name = args.model_name.replace("models/", "")
-        model.save_pretrained(f"./models/{args.model_name + '_' + args.save_name}")
-        tokenizer.save_pretrained(f"./models/{args.model_name + '_' + args.save_name}")
+    if run_cfg.save_name:
+        if "models/" in run_cfg.model_name:
+            run_cfg.model_name = run_cfg.model_name.replace("models/", "")
+        model.save_pretrained(
+            f"./models/{run_cfg.model_name + '_' + run_cfg.save_name}"
+        )
+        tokenizer.save_pretrained(
+            f"./models/{run_cfg.model_name + '_' + run_cfg.save_name}"
+        )
 
     print("Done :)")

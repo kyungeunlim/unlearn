@@ -1,12 +1,13 @@
 """Unlearning via entropy maximization at frozen tuned lens layers (SFT version)."""
 
-import argparse
 import os
-from typing import cast
+from dataclasses import dataclass, field
+from typing import Literal, cast
 
 import torch
 import torch.nn.functional as F
 from accelerate.hooks import remove_hook_from_module
+from simple_parsing import ArgumentParser
 from torch.utils.data import DataLoader
 from transformers import (
     AutoModelForCausalLM,
@@ -92,6 +93,22 @@ class SFTUnlearningTrainer(UnlearningTrainer):
     def compute_loss(
         self, model, inputs, return_outputs=False, num_items_in_batch=None
     ):
+        # import pynvml
+
+        # pynvml.nvmlInit()
+        # device_count = pynvml.nvmlDeviceGetCount()
+
+        # for i in range(device_count):
+        #     handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+        #     name = pynvml.nvmlDeviceGetName(handle)
+        #     mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+
+        #     print(f"GPU {i}: {name}")
+        #     print(f"Memory: {mem_info.used / 1024**2:.2f}MB /
+        # {mem_info.total / 1024**2:.2f}MB")
+
+        # pynvml.nvmlShutdown()
+
         target_device = (
             inputs["input_ids"].device
             if hasattr(inputs["input_ids"], "device")
@@ -237,70 +254,9 @@ class SFTUnlearningTrainer(UnlearningTrainer):
         return (loss,) if return_outputs else loss
 
 
-if __name__ == "__main__":
-    assert torch.cuda.is_available(), "CUDA is not available"
-
-    NUM_PROC = (os.cpu_count() or 32) // 2
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--num_train_examples", type=int, default=1024)
-    parser.add_argument("--unlearn_corrupt", type=bool, default=False)
-    parser.add_argument("--corrupt_ratio", type=float, default=0.5)
-    parser.add_argument(
-        "--corrupt_ds", type=str, default="rewritten", choices=["rewritten", "shuffled"]
-    )
-    parser.add_argument("--wmdp_eval_limit", type=int, default=None)
-    parser.add_argument("--mmlu_agieval_limit", type=int, default=None)
-    parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--pdbs", type=int, default=4)
-    parser.add_argument("--retain_coef", type=float, default=5.0)
-    parser.add_argument("--remove_coef", type=float, default=5.0)
-    parser.add_argument(
-        "--layers",
-        type=int,
-        nargs="+",
-        default=[5, 10, 15, 20, 25, 30],
-        help="List of layers to target",
-    )
-    parser.add_argument(
-        "--model_name", type=str, default="EleutherAI/deep-ignorance-unfiltered"
-    )
-    parser.add_argument("--save_name", type=str, default="")
-    parser.add_argument("--revision", type=str, default="main")
-    parser.add_argument(
-        "--lens_path", type=str, required=True, help="Path to tuned lens weights"
-    )
-    parser.add_argument(
-        "--skip_eval",
-        action="store_true",
-        help="Skip final evaluation (for faster tuning)",
-    )
-    parser.add_argument(
-        "--epochs", type=int, default=1, help="Number of training epochs"
-    )
-    parser.add_argument(
-        "--use_ultrachat",
-        action="store_true",
-        help="Mix UltraChat into retain data (25%% of num_train_examples)",
-    )
-
-    args = parser.parse_args()
-
-    if "smollm2" in args.model_name:
-        args.layers = [l for l in args.layers if l < 24]
-
-    print("Parsed arguments:")
-    for arg, value in vars(args).items():
-        print(f"{arg}: {value}")
-
-    model, tokenizer = get_model_and_tokenizer(args.model_name, revision=args.revision)
-    train_dataset = get_unlearning_dataset(args, tokenizer, NUM_PROC)
-
-    # Load frozen tuned lens
-    print(f"Loading tuned lens from: {args.lens_path}")
-    device = next(model.parameters()).device
+def load_tuned_lenses(lens_path, model, device):
     lens = TunedLens.from_model(model, bias=True)
-    lens_state_dict = torch.load(f"{args.lens_path}/params.pt", map_location=device)
+    lens_state_dict = torch.load(f"{lens_path}/params.pt", map_location=device)
 
     mapped_state_dict = {}
     num_layers = len(lens)
@@ -328,62 +284,105 @@ if __name__ == "__main__":
     lens.eval()
     for param in lens.parameters():
         param.requires_grad = False
-    print(f"Loaded lens with {len(lens)} layer translators (frozen)")
 
-    # Load frozen reference model on CPU for retain loss
-    frozen_ref_model = None
-    if args.retain_coef > 0:
-        # 1. Get the specific GPU index for this process
-        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+    return lens
 
-        # OPTIONAL: Use 4-bit quantization to save massive VRAM (Recommended)
-        # Requires: pip install bitsandbytes
-        try:
-            from transformers import BitsAndBytesConfig
 
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.bfloat16,
-                bnb_4bit_quant_type="nf4",
-            )
-            print("Using 4-bit quantization for reference model to save memory.")
-        except ImportError:
-            bnb_config = None
-            print("bitsandbytes not found, loading in full bf16.")
+@dataclass
+class LensSftUnlearnConfig:
+    num_train_examples: int = 1024
+    unlearn_corrupt: bool = False
+    corrupt_ratio: float = 0.5
+    corrupt_ds: Literal["rewritten", "shuffled"] = "rewritten"
+    wmdp_eval_limit: int | None = None
+    mmlu_agieval_limit: int | None = None
+    lr: float = 1e-3
+    pdbs: int = 4
+    retain_coef: float = 5.0
+    remove_coef: float = 5.0
+    layers: list[int] = field(default_factory=lambda: [5, 10, 15, 20, 25, 30])
+    model_name: str = "EleutherAI/deep-ignorance-unfiltered"
+    save_name: str = ""
+    revision: str = "main"
+    lens_path: str = ""
+    skip_eval: bool = False
+    epochs: int = 1
+    use_ultrachat: bool = False
 
-        frozen_ref_model = AutoModelForCausalLM.from_pretrained(
-            args.model_name,
-            torch_dtype=torch.bfloat16,
-            quantization_config=bnb_config,
-            # CRITICAL: Map everything to the CURRENT GPU only.
-            device_map={"": local_rank},
-        )
 
-        frozen_ref_model.eval()
+if __name__ == "__main__":
+    assert torch.cuda.is_available(), "CUDA is not available"
+
+    NUM_PROC = (os.cpu_count() or 32) // 2
+    local_rank = int(os.environ.get("LOCAL_RANK", 0))
+    world_size = int(os.environ.get("WORLD_SIZE", 1))
+
+    parser = ArgumentParser()
+    parser.add_arguments(LensSftUnlearnConfig, dest="run_cfg")
+    run_cfg = parser.parse_args().run_cfg
+
+    print("Parsed arguments:")
+    for arg, value in vars(run_cfg).items():
+        print(f"{arg}: {value}")
+
+    model, tokenizer = get_model_and_tokenizer(
+        run_cfg.model_name, revision=run_cfg.revision
+    )
+    model = cast(PreTrainedModel, model)
 
     # Enable gradients on training model
     for param in model.parameters():
         param.requires_grad = True
-
-    model = cast(PreTrainedModel, model)
     model.enable_input_require_grads()
 
-    world_size = int(os.environ.get("WORLD_SIZE", 1))
+    # Load dataset
+    train_dataset = get_unlearning_dataset(run_cfg, tokenizer, NUM_PROC)
+
+    # Load frozen tuned lens
+    print(f"Loading tuned lens from: {run_cfg.lens_path}")
+    device = next(model.parameters()).device
+    lens = load_tuned_lenses(run_cfg.lens_path, model, device)
+    print(f"Loaded lens with {len(lens)} layer translators (frozen)")
+
+    # Load frozen reference model for retain loss
+    frozen_ref_model = None
+    try:
+        from transformers import BitsAndBytesConfig
+
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_quant_type="nf4",
+        )
+        print("Using 4-bit quantization for reference model to save memory.")
+    except ImportError:
+        bnb_config = None
+        print("bitsandbytes not found, loading in full bf16.")
+        print("Run pip install bitsandbytes")
+
+    frozen_ref_model = AutoModelForCausalLM.from_pretrained(
+        run_cfg.model_name,
+        torch_dtype=torch.bfloat16,
+        quantization_config=bnb_config,
+        device_map={"": local_rank},
+    )
+    frozen_ref_model.eval()
+
     global_batch_size = 32
-    grad_acc_steps = max(1, global_batch_size // (args.pdbs * world_size))
+    grad_acc_steps = max(1, global_batch_size // (run_cfg.pdbs * world_size))
 
     print(
-        f"Running with {world_size} GPUs. Per device batch: {args.pdbs}. "
+        f"Running with {world_size} GPUs. Per device batch: {run_cfg.pdbs}. "
         f"Grad Acc steps: {grad_acc_steps}."
     )
 
     training_args = TrainingArguments(
         output_dir="./results",
-        learning_rate=args.lr,
+        learning_rate=run_cfg.lr,
         gradient_accumulation_steps=grad_acc_steps,
-        per_device_train_batch_size=args.pdbs,
-        per_device_eval_batch_size=args.pdbs,
-        num_train_epochs=args.epochs,
+        per_device_train_batch_size=run_cfg.pdbs,
+        per_device_eval_batch_size=run_cfg.pdbs,
+        num_train_epochs=run_cfg.epochs,
         weight_decay=0.01,
         gradient_checkpointing=False,
         bf16=True,
@@ -392,12 +391,12 @@ if __name__ == "__main__":
     )
 
     trainer = SFTUnlearningTrainer(
-        args,
+        run_cfg,
         model,
         training_args,
         train_dataset,
         tokenizer,
-        args.layers,
+        run_cfg.layers,
         lens=lens,
         frozen_ref_model=frozen_ref_model,
         model=model,
@@ -407,12 +406,11 @@ if __name__ == "__main__":
     model.train()
     trainer.train()
 
-    if args.save_name:
-        args.save_name = f"{args.save_name}_sft"
-        if "models/" in args.model_name:
-            args.model_name = args.model_name.replace("models/", "")
-        save_path = f"./models/{args.model_name}_{args.save_name}"
-        # Use trainer.save_model to properly handle FSDP state gathering
+    if run_cfg.save_name:
+        if "models/" in run_cfg.model_name:
+            run_cfg.model_name = run_cfg.model_name.replace("models/", "")
+        save_path = f"./models/{run_cfg.model_name}_{run_cfg.save_name}"
+
         trainer.save_model(save_path)
         tokenizer.save_pretrained(save_path)
 

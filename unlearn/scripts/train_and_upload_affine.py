@@ -25,7 +25,9 @@ from unlearn.reference.cas.utils import (
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Train affine transforms between two model checkpoints and upload to HF"
+        description=(
+            "Train affine transforms between two model " "checkpoints and upload to HF"
+        )
     )
     parser.add_argument(
         "--source_model",

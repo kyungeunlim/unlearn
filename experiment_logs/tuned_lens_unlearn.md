@@ -1,7 +1,7 @@
 # Tuned Lens Unlearning Experiments
 
 ## Method
-Unlearning via tuned lens activations - training model to match lens-projected (earlier layer) representations on forget data while maintaining performance on retain data.
+Unlearning via tuned lens activations - on forget data, representations at each layer are mapped to predictions using tuned lenses, then those predictions are unlearned using cross-entropy against random token labels (maximizing entropy). Retain loss is L2 norm between hidden states of the LoRA-adapted model and the frozen original model on retain data, preserving the original model's intermediate representations.
 
 ## Configuration
 - **Model**: EleutherAI/deep-ignorance-unfiltered
@@ -32,20 +32,24 @@ Unlearning via tuned lens activations - training model to match lens-projected (
 
 ### SFT + AdamW Optimizer
 
-| examples | steps | retain_coef | remove_coef | adam_lr | WMDP Bio (↓) | WMDP Robust | MMLU | Notes |
-|----------|-------|-------------|-------------|---------|--------------|-------------|-----------|-------|
-| -        | -     | -           | -           | -       | 42.97%       | 42.97%      | 45.10% | Baseline |
-| 1024     | 32    | 0.0         | 5.0         | 1e-5    | -            | 42.86%      | timeout   | Job 2042124: No unlearning (baseline=42.97%), MMLU eval timed out |
-| 1024     | 32    | 0.0         | 5.0         | 1e-5    | -            | 42.17%      | 44.14%    | Job 2042919: SFT no retain (insufficient lr) |
-| 1024     | 32    | 5.0         | 5.0         | 1e-5    | -            | 43.43%      | 45.09%    | Job 2045965: No unlearning (lr too low), MMLU preserved |
-| 1024     | 32    | 5.0         | 5.0         | 1e-4    | -            | 43.55%      | 42.42%    | Job 2046753: Still no unlearning, MMLU slight degradation |
-| 1024     | 32    | 20.0        | 5.0         | 1e-3    | -            | 24.08%      | 26.90%    | Job 2047279: Strong unlearning but MMLU damaged |
-| 1024     | 32    | 10.0        | 1.0         | 1e-3    | -            | 26.73%      | 22.95%    | Job 2062489 |
-| 1024     | 32    | 15.0        | 1.0         | 1e-3    | -            | 25.69%      | 25.51%    | Job 2062376 |
-| 1024     | 32    | 20.0        | 1.0         | 1e-3    | -            | 26.04%      | 25.57%    | Job 2062377 |
-| 1024     | 32    | 30.0        | 1.0         | 1e-3    | -            | 27.19%      | 22.95%    | Job 2062378 |
+| examples | steps | retain_coef | remove_coef | adam_lr | WMDP Robust | MMLU | Notes |
+|----------|-------|-------------|-------------|---------|-------------|-----------|-------|
+| -        | -     | -           | -           | -       | 42.97%      | 45.10% | Baseline |
+| 1024     | 32    | 0.0         | 5.0         | 1e-5    | 42.86%      | timeout   | Job 2042124: No unlearning (baseline=42.97%), MMLU eval timed out |
+| 1024     | 32    | 0.0         | 5.0         | 1e-5    | 42.17%      | 44.14%    | Job 2042919: SFT no retain (insufficient lr) |
+| 1024     | 32    | 5.0         | 5.0         | 1e-5    | 43.43%      | 45.09%    | Job 2045965: No unlearning (lr too low), MMLU preserved |
+| 1024     | 32    | 5.0         | 5.0         | 1e-4    | 43.55%      | 42.42%    | Job 2046753: Still no unlearning, MMLU slight degradation |
+| 1024     | 32    | 20.0        | 5.0         | 1e-3    | 24.08%      | 26.90%    | Job 2047279: Strong unlearning but MMLU damaged |
+| 1024     | 32    | 10.0        | 1.0         | 1e-3    | 26.73%      | 22.95%    | Job 2062489 |
+| 1024     | 32    | 15.0        | 1.0         | 1e-3    | 25.69%      | 25.51%    | Job 2062376 |
+| 1024     | 32    | 20.0        | 1.0         | 1e-3    | 26.04%      | 25.57%    | Job 2062377 |
+| 1024     | 32    | 30.0        | 1.0         | 1e-3    | 27.19%      | 22.95%    | Job 2062378 |
+| 1024     | 32    | 80.0        | 1.0         | 1e-3    | 24.88%      | 23.59%    | Job 2075380 |
+| 1024     | 32    | 100.0       | 1.0         | 1e-3    | 23.50%      | 24.65%    | Job 2075390 |
+| 1024     | 32    | 200.0       | 1.0         | 1e-3    | 24.08%      | 26.89%    | Job 2075391 |
+| 1024     | 32    | 500.0       | 1.0         | 1e-3    | 26.50%      | 22.95%    | Job 2075383 |
 
-## Tampering Resistance (Finetune Attack)
+## Tamper Resistance (Finetune Attack)
 
 Model: `deep-ignorance-unfiltered_lens_ex8192_rm5.0_ret5.0`
 Dataset: `Unlearning/WMDP-Bio-Remove-Dataset`

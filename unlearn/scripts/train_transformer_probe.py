@@ -23,7 +23,9 @@ from unlearn.reference.cas.utils import (
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Train transformer probes to map activations between model checkpoints"
+        description=(
+            "Train transformer probes to map activations " "between model checkpoints"
+        )
     )
     parser.add_argument(
         "--source_model",
@@ -111,7 +113,8 @@ def main():
     print(f"Source: {args.source_model} @ {args.source_revision}")
     print(f"Target: {args.target_model} @ {args.target_revision}")
     print(
-        f"Probe: dim={args.probe_dim}, layers={args.probe_layers}, heads={args.probe_heads}"
+        f"Probe: dim={args.probe_dim}, layers={args.probe_layers}"
+        f", heads={args.probe_heads}"
     )
     print(f"Training: {args.num_train_examples} examples, {args.epochs} epochs")
     print("=" * 60)
@@ -224,7 +227,8 @@ def main():
             eval_mse = trainer.evaluate(eval_loader)
 
             print(
-                f"Epoch {epoch + 1}/{args.epochs}: train_mse={train_mse:.6f}, eval_mse={eval_mse:.6f}"
+                f"Epoch {epoch + 1}/{args.epochs}: "
+                f"train_mse={train_mse:.6f}, eval_mse={eval_mse:.6f}"
             )
 
             final_train_mse = train_mse
