@@ -52,6 +52,7 @@ if ! python -c "import torch; exit(0 if torch.cuda.is_available() else 1)"; then
 fi
 
 SAVE_NAME="ct_ret${RETAIN_COEF}_rm${REMOVE_COEF}_ex${NUM_EXAMPLES}"
+MODEL_PATH="./models/EleutherAI/deep-ignorance-unfiltered_${SAVE_NAME}"
 
 echo "===== Training ====="
 python -m unlearn.algorithm.checkpoint_transfer_unlearn \
@@ -61,9 +62,7 @@ python -m unlearn.algorithm.checkpoint_transfer_unlearn \
     --pdbs=4 \
     --model_name=EleutherAI/deep-ignorance-unfiltered \
     --load_affine_from_hub=EleutherAI/affine-checkpoint-transfer \
-    --save_name=$SAVE_NAME
-
-MODEL_PATH="./models/EleutherAI/deep-ignorance-unfiltered_${SAVE_NAME}"
+    --save_path=$MODEL_PATH
 
 echo "===== WMDP Bio Eval ====="
 HF_DATASETS_TRUST_REMOTE_CODE=1 accelerate launch --num_processes 4 -m lm_eval --model hf \

@@ -3,20 +3,18 @@
 
 import os
 from dataclasses import dataclass, field
-from typing import Dict, Literal, cast
+from typing import Literal, cast
 
 import torch
 from peft import LoraConfig, get_peft_model
 from simple_parsing import ArgumentParser
-from torch import nn
 from torch.utils.data import DataLoader
 from transformers import PreTrainedModel, Trainer, TrainingArguments
 from transformers.modeling_utils import unwrap_model
 from transformers.trainer_utils import seed_worker
 
-from unlearn.utils.hook import ActivationCapture
+from unlearn.utils.hook import ActivationCapture, resolve_layer_names
 from unlearn.utils.unlearning_dataset import get_unlearning_dataset
-from unlearn.utils.utils import assert_type
 from unlearn.utils.worker_utils import get_model_and_tokenizer, save_checkpoint
 
 
@@ -47,82 +45,8 @@ class UnlearningTrainer(Trainer):
         self.remove_coef = self.run_args.remove_coef
         self.trainer_tokenizer = tokenizer
 
-        # --- Resolve Layer Names for Hooks ---
-        # We need to map integer indices (e.g., 5) to module
-        # names (e.g., "model.layers.5")
-        self.layer_id_to_name = self._resolve_layer_names(model, lora_target_layers)
+        self.layer_id_to_name = resolve_layer_names(model, lora_target_layers)
         self.target_module_names = list(self.layer_id_to_name.values())
-
-    def _resolve_layer_names(self, model, layer_indices) -> Dict[int, str]:
-        """
-        Dynamically finds the module names corresponding to the requested layer indices.
-        Handles PEFT wrapping and different architectures (OLMo, Llama, etc.).
-        """
-        unwrapped = unwrap_model(model)
-
-        # Navigate through PEFT/DDP wrappers to find the base transformer
-        base = unwrapped
-        if hasattr(base, "base_model"):
-            base = base.base_model
-        if hasattr(base, "model"):
-            base = base.model  # type: ignore
-
-        base = assert_type(nn.Module, base)
-
-        # Identify the list of layers (e.g., 'layers', 'blocks', 'h')
-        layer_list_name = None
-        for name, module in base.named_modules():
-            if isinstance(module, nn.ModuleList) and len(module) > 0:
-                # Heuristic: usually the longest ModuleList is the transformer blocks
-                # and contains 'layers' or 'blocks' in the name
-                if "layers" in name or "blocks" in name or "h" in name:
-                    layer_list_name = name
-                    break
-
-        if not layer_list_name:
-            # Fallback for OLMo specific if naming is tricky
-            if hasattr(base, "transformer") and hasattr(base.transformer, "blocks"):
-                layer_list_name = "transformer.blocks"
-            elif hasattr(base, "layers"):
-                layer_list_name = "layers"
-            else:
-                raise ValueError(
-                    "Could not automatically locate transformer layer list."
-                )
-
-        # Construct full names relative to the unwrapped model
-        # Note: named_modules() on the full model will include prefixes.
-        # We scan the full unwrapped model to match the exact string for the hook.
-
-        mapping = {}
-        # We need the prefix required to reach 'base' from 'unwrapped'
-        # To do this safely, we just iterate the full unwrapped model
-        # and find the matching suffix.
-
-        found_count = 0
-        target_indices = set(layer_indices)
-
-        for name, module in unwrapped.named_modules():
-            # Check if this module is one of the layers we want
-            # The name usually ends in "{layer_list_name}.{index}"
-            if layer_list_name in name:
-                try:
-                    # Extract index from end of string (e.g., "model.layers.10" -> 10)
-                    parts = name.split(".")
-                    idx = int(parts[-1])
-                    if idx in target_indices:
-                        mapping[idx] = name
-                        found_count += 1
-                except ValueError:
-                    continue
-
-        if len(mapping) != len(target_indices):
-            print(
-                f"Warning: requested {len(target_indices)} layers, "
-                f"but found {len(mapping)}."
-            )
-
-        return mapping
 
     def get_train_dataloader(self) -> DataLoader:
         if self.train_dataset is None:
@@ -341,7 +265,7 @@ class BaseUnlearnConfig:
     lora: bool = True
     layers: list[int] = field(default_factory=lambda: [5, 10, 15, 20, 25, 30])
     model_name: str = "EleutherAI/deep-ignorance-unfiltered"
-    save_name: str = ""
+    save_path: str = ""
     revision: str = "main"
     hidden_dim: int = 4096
 
@@ -428,7 +352,7 @@ if __name__ == "__main__":
     if run_cfg.lora:
         model = model.merge_and_unload()  # type: ignore
 
-    if run_cfg.save_name:
-        save_checkpoint(trainer, run_cfg, tokenizer)
+    if run_cfg.save_path:
+        save_checkpoint(trainer, run_cfg.save_path, tokenizer)
 
     print("Done :)")

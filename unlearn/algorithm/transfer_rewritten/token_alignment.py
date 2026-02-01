@@ -101,7 +101,8 @@ class SnapAlignmentStrategy(AlignmentStrategy):
         if source_len == 0:
             return []
 
-        # If target gap is empty (deletion), snap all source tokens to the fallback index
+        # If target gap is empty (deletion), snap all source
+        # tokens to the fallback index
         if target_len == 0:
             if debug:
                 print(

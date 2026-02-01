@@ -293,7 +293,7 @@ class LensMuonUnlearnConfig:
     muon_momentum: float = 0.95
     layers: list[int] = field(default_factory=lambda: [5, 10, 15, 20, 25, 30])
     model_name: str = "EleutherAI/deep-ignorance-unfiltered"
-    save_name: str = ""
+    save_path: str = ""
     revision: str = "main"
     lens_path: str = ""
     skip_eval: bool = False
@@ -445,8 +445,8 @@ if __name__ == "__main__":
 
     global_rank = int(os.environ.get("RANK", 0))
 
-    if run_cfg.save_name:
-        save_checkpoint(trainer, run_cfg, tokenizer)
+    if run_cfg.save_path:
+        save_checkpoint(trainer, run_cfg.save_path, tokenizer)
 
     if global_rank == 0:
         print("Done :)")

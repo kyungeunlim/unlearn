@@ -10,7 +10,6 @@ from pathlib import Path
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
-import wandb
 from datasets import load_from_disk
 from huggingface_hub import HfApi
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -20,6 +19,7 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+import wandb
 from tuned_lens import TunedLens
 
 

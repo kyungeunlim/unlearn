@@ -470,7 +470,7 @@ class CheckpointTransferConfig:
     lora: bool = True
     layers: list[int] = field(default_factory=lambda: [5, 10, 15, 20, 25, 30])
     model_name: str = "EleutherAI/deep-ignorance-unfiltered"
-    save_name: str = ""
+    save_path: str = ""
     revision: str = "main"
     checkpoint_name: str = "EleutherAI/deep-ignorance-pretraining-stage-unfiltered"
     checkpoint_revision: str = "global_step38144"
@@ -677,7 +677,7 @@ if __name__ == "__main__":
     if run_cfg.lora:
         model = model.merge_and_unload()
 
-    if run_cfg.save_name:
-        save_checkpoint(trainer, run_cfg, tokenizer)
+    if run_cfg.save_path:
+        save_checkpoint(trainer, run_cfg.save_path, tokenizer)
 
     print("Done :)")

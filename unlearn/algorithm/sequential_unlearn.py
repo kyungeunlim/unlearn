@@ -23,6 +23,7 @@ from transformers import PreTrainedModel, Trainer, TrainingArguments
 from transformers.modeling_utils import unwrap_model
 from transformers.trainer_utils import seed_worker
 
+from unlearn.utils.hook import ActivationCapture, resolve_layer_names
 from unlearn.utils.math import max_entropy_kl_loss
 from unlearn.utils.unlearning_dataset import get_unlearning_dataset
 from unlearn.utils.worker_utils import get_model_and_tokenizer, save_checkpoint
@@ -142,6 +143,12 @@ class SequentialUnlearningTrainer(Trainer):
             param.requires_grad = False
         self.original_model.eval()
 
+        # Resolve hook layer for forget path (output of block target_layer - 1)
+        forget_hook_layer = target_layer - 1 if target_layer > 0 else 0
+        hook_layer_indices = [forget_hook_layer]
+        self.layer_id_to_name = resolve_layer_names(model, hook_layer_indices)
+        self.target_module_names = list(self.layer_id_to_name.values())
+
     def get_train_dataloader(self) -> DataLoader:
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
@@ -188,10 +195,12 @@ class SequentialUnlearningTrainer(Trainer):
         retain_coeff = self.run_args.retain_coef * progress
         forget_coeff = self.run_args.remove_coef * (1 - 0.25 * progress)
 
+        capturer = ActivationCapture(unwrapped_model, self.target_module_names)
+
         # === Retain loss: keep full model outputs close to original ===
         if retain_coeff > 0:
             if self.run_args.retain_loss_type == "kl":
-                # KL divergence on output logits
+                # KL divergence on output logits (no hidden states needed)
                 with torch.no_grad():
                     orig_outputs = self.original_model(
                         input_ids=retain_input_ids,
@@ -205,7 +214,6 @@ class SequentialUnlearningTrainer(Trainer):
                 )
                 current_logits = current_outputs.logits
 
-                # KL(current || original) on masked positions
                 mask = retain_attention_mask.bool()
                 orig_probs = F.softmax(orig_logits[mask].float(), dim=-1)
                 current_log_probs = F.log_softmax(current_logits[mask].float(), dim=-1)
@@ -213,7 +221,7 @@ class SequentialUnlearningTrainer(Trainer):
                     current_log_probs, orig_probs, reduction="batchmean"
                 )
             else:
-                # L2 norm on hidden states (default)
+                # L2 on all hidden states (matching original behavior)
                 with torch.no_grad():
                     orig_outputs = self.original_model(
                         input_ids=retain_input_ids,
@@ -241,19 +249,19 @@ class SequentialUnlearningTrainer(Trainer):
 
         # === Forget loss: maximize entropy via original model's later layers ===
         if forget_coeff > 0:
-            # Get hidden states at target layer from current model
-            current_outputs = unwrapped_model(
+            # Hook on layers.{target_layer - 1} captures output of block
+            # target_layer - 1, which is input to block target_layer
+            capturer.register()
+            unwrapped_model(
                 input_ids=forget_input_ids,
                 attention_mask=forget_attention_mask,
-                output_hidden_states=True,
             )
-            # hidden_states[L] is output of layer L-1 / input to layer L
-            # To process through layers L onwards, we want hidden_states[L]
-            hidden_at_layer = current_outputs.hidden_states[self.target_layer]
+            forget_hook_layer = self.target_layer - 1 if self.target_layer > 0 else 0
+            hidden_at_layer = capturer.activations[
+                self.layer_id_to_name[forget_hook_layer]
+            ]
+            capturer.remove()
 
-            # Pass our hidden states through original model's remaining layers
-            # We need gradients to flow back through hidden_at_layer
-            # Keep dtype consistent with original model (typically bfloat16)
             orig_dtype = next(self.original_model.parameters()).dtype
             logits = forward_from_layer(
                 self.original_model,
@@ -320,7 +328,7 @@ class SequentialUnlearnConfig:
     end_layer: int = 8
     layer_step: int = 4
     model_name: str = "EleutherAI/deep-ignorance-unfiltered"
-    save_name: str = ""
+    save_path: str = ""
     revision: str = "main"
     epochs_per_layer: int = 1
     use_max_entropy_kl: bool = False
@@ -393,7 +401,7 @@ def main():
 
     # Sequential unlearning: back to front
     for layer_idx in layers_to_unlearn:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Unlearning Layer {layer_idx}")
         print("=" * 60)
 
@@ -431,8 +439,8 @@ def main():
     print("\nMerging LoRA weights...")
     model = model.merge_and_unload()
 
-    if run_cfg.save_name:
-        save_checkpoint(trainer, run_cfg, tokenizer)
+    if run_cfg.save_path:
+        save_checkpoint(trainer, run_cfg.save_path, tokenizer)
 
     print("\nTraining complete")
 

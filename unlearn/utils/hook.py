@@ -1,10 +1,66 @@
 from contextlib import contextmanager
 from functools import partial
-from typing import Any
+from typing import Any, Dict
 
 import torch
 from torch import nn
-from transformers.modeling_utils import PreTrainedModel
+from transformers.modeling_utils import PreTrainedModel, unwrap_model
+
+from unlearn.utils.utils import assert_type
+
+
+def resolve_layer_names(
+    model: PreTrainedModel, layer_indices: list[int]
+) -> Dict[int, str]:
+    """
+    Map integer layer indices to module names for use with forward hooks.
+    Handles PEFT wrapping and different architectures (OLMo, Llama, etc.).
+    """
+    unwrapped = unwrap_model(model)
+
+    base = unwrapped
+    if hasattr(base, "base_model"):
+        base = base.base_model
+    if hasattr(base, "model"):
+        base = base.model  # type: ignore
+
+    base = assert_type(nn.Module, base)
+
+    layer_list_name = None
+    for name, module in base.named_modules():
+        if isinstance(module, nn.ModuleList) and len(module) > 0:
+            if "layers" in name or "blocks" in name or "h" in name:
+                layer_list_name = name
+                break
+
+    if not layer_list_name:
+        if hasattr(base, "transformer") and hasattr(base.transformer, "blocks"):
+            layer_list_name = "transformer.blocks"
+        elif hasattr(base, "layers"):
+            layer_list_name = "layers"
+        else:
+            raise ValueError("Could not automatically locate transformer layer list.")
+
+    mapping = {}
+    target_indices = set(layer_indices)
+
+    for name, module in unwrapped.named_modules():
+        if layer_list_name in name:
+            parts = name.split(".")
+            try:
+                idx = int(parts[-1])
+            except ValueError:
+                continue
+            if idx in target_indices:
+                mapping[idx] = name
+
+    if len(mapping) != len(target_indices):
+        print(
+            f"Warning: requested {len(target_indices)} layers, "
+            f"but found {len(mapping)}."
+        )
+
+    return mapping
 
 
 class ActivationCapture:

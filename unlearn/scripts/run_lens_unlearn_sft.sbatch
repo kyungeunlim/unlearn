@@ -85,7 +85,7 @@ CMD="accelerate launch --config_file=$FSDP_CONFIG -m unlearn.algorithm.lens_unle
     --lr=$LR \
     --warmup_ratio=$WARMUP_RATIO \
     --model_name=EleutherAI/deep-ignorance-unfiltered \
-    --save_name=$SAVE_NAME"
+    --save_path=$MODEL_PATH"
 echo "Command: $CMD"
 $CMD
 

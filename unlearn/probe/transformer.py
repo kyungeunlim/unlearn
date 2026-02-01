@@ -25,7 +25,8 @@ class TransformerProbeConfig:
     def __post_init__(self):
         if self.probe_dim % self.num_heads != 0:
             raise ValueError(
-                f"probe_dim ({self.probe_dim}) must be divisible by num_heads ({self.num_heads})"
+                f"probe_dim ({self.probe_dim}) must be divisible "
+                f"by num_heads ({self.num_heads})"
             )
 
 

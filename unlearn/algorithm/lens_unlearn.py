@@ -11,15 +11,13 @@ from peft import LoraConfig, get_peft_model
 from simple_parsing import ArgumentParser
 from torch.utils.data import DataLoader
 from transformers import PreTrainedModel, Trainer, TrainingArguments
+from transformers.modeling_utils import unwrap_model
 from transformers.trainer_utils import seed_worker
 from tuned_lens import TunedLens
 
+from unlearn.utils.hook import ActivationCapture, resolve_layer_names
 from unlearn.utils.unlearning_dataset import get_unlearning_dataset
-from unlearn.utils.worker_utils import (
-    get_model_and_tokenizer,
-    save_checkpoint,
-    unwrap_model,
-)
+from unlearn.utils.worker_utils import get_model_and_tokenizer, save_checkpoint
 
 
 class UnlearningTrainer(Trainer):
@@ -51,6 +49,9 @@ class UnlearningTrainer(Trainer):
         self.trainer_tokenizer = tokenizer
         self.lens = lens
 
+        self.layer_id_to_name = resolve_layer_names(model, lora_target_layers)
+        self.target_module_names = list(self.layer_id_to_name.values())
+
     def get_train_dataloader(self) -> DataLoader:
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
@@ -76,16 +77,11 @@ class UnlearningTrainer(Trainer):
 
 
 class RRTrainer(UnlearningTrainer):
-
     def compute_loss(
         self, model, inputs, return_outputs=False, num_items_in_batch=None
     ):
-        # 1. Unwrap model if using DDP to access .disable_adapter()
-        # and specific layers.
         unwrapped_model = unwrap_model(model)
 
-        # Determine device from inputs (safest way in DDP)
-        # If inputs aren't on device yet, fall back to model device
         target_device = (
             inputs["input_ids"].device
             if hasattr(inputs["input_ids"], "device")
@@ -102,22 +98,19 @@ class RRTrainer(UnlearningTrainer):
         )  # type: ignore
 
         # ==== Forward Inputs ====
-        module = "hidden_states"
         retain_inputs_dict = dict(
             input_ids=retain_input_ids,
             attention_mask=retain_attention_mask,
-            output_hidden_states=True,
+            output_hidden_states=False,
         )
         cb_inputs_dict = dict(
             input_ids=circuit_breaker_input_ids,
             attention_mask=circuit_breaker_attention_mask,
-            output_hidden_states=True,
+            output_hidden_states=False,
         )
 
         # ===== Step Coeff ====
-        # Recalculate global batch size for scheduling to be accurate in DDP
         world_size = int(os.environ.get("WORLD_SIZE", 1))
-        # Note: self.run_args.pdbs is per-device.
 
         scheduled_coeff = min(
             [
@@ -131,54 +124,63 @@ class RRTrainer(UnlearningTrainer):
         retain_coeff = self.retain_coef * scheduled_coeff
         circuit_breaker_coeff = self.remove_coef * (1 - 0.25 * scheduled_coeff)
 
-        # Optimization: Broadcasting masks (Batch, Seq) -> (1, Batch, Seq, 1)
         broadcast_retain_mask = retain_attention_mask.unsqueeze(0).unsqueeze(-1)
 
-        # Use unwrapped_model for context manager
-        # (DDP wrapper doesn't have disable_adapter)
+        capturer = ActivationCapture(unwrapped_model, self.target_module_names)
+
+        # --- Forward Pass 1: Reference (No Adapter) ---
         with unwrapped_model.disable_adapter():  # type: ignore
             unwrapped_model.eval()  # type: ignore
+            capturer.register()
+
             with torch.no_grad():
-                ### Retain control
                 if retain_coeff > 0:
-                    orig_retain_outputs = unwrapped_model(**retain_inputs_dict)[module]  # type: ignore
-                    orig_retain_hidden = torch.stack(orig_retain_outputs).detach()
+                    unwrapped_model(**retain_inputs_dict)
+                    orig_retain_hidden = torch.stack(
+                        [
+                            capturer.activations[self.layer_id_to_name[l]].detach()
+                            for l in self.lora_target_layers
+                        ]
+                    )
                     orig_retain_hidden *= broadcast_retain_mask
-                    del orig_retain_outputs
+
+            capturer.remove()
 
         unwrapped_model.train()  # type: ignore
 
-        ### Retain control
+        # --- Forward Pass 2: Training (With Adapter) ---
+        capturer.register()
+
+        ### Retain L2 loss
         if retain_coeff > 0:
-            # We use unwrapped_model to access specific hidden states.
-            # DDP usually requires using 'model' to sync gradients, but since
-            # we are effectively doing a manual loss calculation on sub-components
-            # and Accelerate/Trainer handles the backward pass sync, this is safe.
-            # If you see hanging, switch these forward passes to use 'model'
-            # (but you lose direct access to [module] output structure if wrapped).
-            lora_retain_outputs = unwrapped_model(**retain_inputs_dict)[module]
-            lora_retain_hidden = (
-                torch.stack(lora_retain_outputs) * broadcast_retain_mask
+            unwrapped_model(**retain_inputs_dict)
+
+            lora_retain_hidden = torch.stack(
+                [
+                    capturer.activations[self.layer_id_to_name[l]]
+                    for l in self.lora_target_layers
+                ]
             )
+            lora_retain_hidden = lora_retain_hidden * broadcast_retain_mask
+
             retain_loss = torch.norm(
                 lora_retain_hidden - orig_retain_hidden, dim=-1, p=2, dtype=torch.float
             ).nanmean()
+
+            capturer.clear()
         else:
             retain_loss = 0
 
         ### Forget loss - entropy maximization via tuned lens
-        ### (memory-efficient CE proxy)
         if circuit_breaker_coeff > 0:
-            lora_circuit_breaker_outputs = unwrapped_model(**cb_inputs_dict)[module]
+            unwrapped_model(**cb_inputs_dict)
 
-            # Use cross-entropy with random targets as memory-efficient
-            # entropy proxy
-            # Minimizing CE against random tokens spreads probability
-            # mass -> maximizes entropy
             layer_losses = []
             lens_device = next(self.lens.parameters()).device
             for layer_idx in self.lora_target_layers:
-                hidden = lora_circuit_breaker_outputs[layer_idx]  # [batch, seq, hidden]
+                hidden = capturer.activations[
+                    self.layer_id_to_name[layer_idx]
+                ]  # [batch, seq, hidden]
                 hidden_bf16 = hidden.to(device=lens_device, dtype=torch.bfloat16)
 
                 lens_logits = self.lens(
@@ -186,15 +188,13 @@ class RRTrainer(UnlearningTrainer):
                 )  # [batch, seq, vocab]
                 batch_size, seq_len, vocab_size = lens_logits.shape
 
-                # Random target tokens
                 random_targets = torch.randint(
                     0, vocab_size, (batch_size, seq_len), device=lens_logits.device
                 )
 
-                # Compute CE loss only on non-padded tokens
                 mask = circuit_breaker_attention_mask.bool()
-                logits_flat = lens_logits[mask]  # [num_valid_tokens, vocab]
-                targets_flat = random_targets[mask]  # [num_valid_tokens]
+                logits_flat = lens_logits[mask]
+                targets_flat = random_targets[mask]
 
                 if logits_flat.numel() > 0:
                     ce_loss = F.cross_entropy(
@@ -202,19 +202,19 @@ class RRTrainer(UnlearningTrainer):
                     )
                     layer_losses.append(ce_loss)
 
-            # Minimize CE against random targets to maximize entropy
-            # Normalize by ln(vocab_size) to keep loss in similar scale
             log_vocab = torch.log(torch.tensor(float(vocab_size), device=target_device))
             if layer_losses:
                 mean_ce = torch.stack(layer_losses).mean()
                 circuit_breaker_loss = mean_ce / log_vocab
-                mean_entropy = -mean_ce  # For logging compatibility (approx)
+                mean_entropy = -mean_ce
             else:
                 circuit_breaker_loss = torch.tensor(0.0, device=target_device)
                 mean_entropy = torch.tensor(0.0)
         else:
             circuit_breaker_loss = torch.tensor(0.0, device=target_device)
             mean_entropy = torch.tensor(0.0)
+
+        capturer.remove()
 
         loss = retain_coeff * retain_loss + circuit_breaker_coeff * circuit_breaker_loss
 
@@ -234,8 +234,6 @@ class RRTrainer(UnlearningTrainer):
                 f"forget_loss: {circuit_breaker_loss:.4f} || "
                 f"mean_entropy: {entropy_val:.4f}"
             )
-
-        # Optimization: Moved heavy eval out of loop
 
         self.current_training_step += 1
         return (loss,) if return_outputs else loss
@@ -257,7 +255,7 @@ class LensUnlearnConfig:
     lora: bool = True
     layers: list[int] = field(default_factory=lambda: [5, 10, 15, 20, 25, 30])
     model_name: str = "EleutherAI/deep-ignorance-unfiltered"
-    save_name: str = ""
+    save_path: str = ""
     revision: str = "main"
     lens_path: str = ""
     skip_eval: bool = False
@@ -394,7 +392,7 @@ if __name__ == "__main__":
     if run_cfg.lora:
         model = model.merge_and_unload()  # type: ignore
 
-    if run_cfg.save_name:
-        save_checkpoint(trainer, run_cfg, tokenizer)
+    if run_cfg.save_path:
+        save_checkpoint(trainer, run_cfg.save_path, tokenizer)
 
     print("Done :)")

@@ -74,7 +74,7 @@ def main():
         f"--num_train_examples={args.num_train_examples}",
         f"--pdbs={args.pdbs}",
         f"--model_name={args.model_name}",
-        f"--save_name={save_name}",
+        f"--save_path={model_save_path}",
     ]
     print(f"Command: {' '.join(train_cmd)}")
     sys.stdout.flush()

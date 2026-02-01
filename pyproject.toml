@@ -45,6 +45,7 @@ reportPrivateImportUsage = false
 include = ["unlearn*"]
 
 [tool.ruff]
+exclude = ["unlearn/reference"]
 lint.ignore = ["E741","F722"]   # Ambiguous variable name, jaxtyping typing error
 # Enable pycodestyle (`E`), Pyflakes (`F`), and isort (`I`) codes
 # See https://beta.ruff.rs/docs/rules/ for more possible rules

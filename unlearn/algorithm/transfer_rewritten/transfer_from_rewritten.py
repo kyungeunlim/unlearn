@@ -13,32 +13,32 @@ import warnings
 warnings.filterwarnings("ignore", category=FutureWarning, module="transformers")
 warnings.filterwarnings("ignore", category=FutureWarning, module="huggingface_hub")
 
-import os
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Literal
+import os  # noqa: E402
+from dataclasses import dataclass  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any, Literal  # noqa: E402
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from datasets import Dataset
-from simple_parsing import ArgumentParser, ConflictResolution
-from torch.optim import AdamW
-from torch.utils.data import IterableDataset as TorchIterableDataset
-from transformers import (
+import torch  # noqa: E402
+import torch.nn as nn  # noqa: E402
+import torch.nn.functional as F  # noqa: E402
+from datasets import Dataset  # noqa: E402
+from simple_parsing import ArgumentParser, ConflictResolution  # noqa: E402
+from torch.optim import AdamW  # noqa: E402
+from torch.utils.data import IterableDataset as TorchIterableDataset  # noqa: E402
+from transformers import (  # noqa: E402
     AutoModelForCausalLM,
     AutoTokenizer,
     Trainer,
     TrainingArguments,
 )
-from unlearn.transfer_rewritten.muon import MuonAdamW
-from unlearn.transfer_rewritten.token_alignment import (
+from unlearn.transfer_rewritten.muon import MuonAdamW  # noqa: E402
+from unlearn.transfer_rewritten.token_alignment import (  # noqa: E402
     AlignmentStrategy,
     SnapAlignmentStrategy,
 )
 
-from unlearn.evaluation.eval_callback import EvalCallback
-from unlearn.utils.hook import ActivationCapture
+from unlearn.evaluation.eval_callback import EvalCallback  # noqa: E402
+from unlearn.utils.hook import ActivationCapture  # noqa: E402
 
 location = "google"
 

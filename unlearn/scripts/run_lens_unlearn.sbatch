@@ -7,9 +7,12 @@
 #SBATCH --time=24:00:00
 #SBATCH --output=runs/lens-unlearn-%j.out
 
-# Get repository root
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+if [ -n "$SLURM_SUBMIT_DIR" ]; then
+    REPO_ROOT="$SLURM_SUBMIT_DIR"
+else
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+fi
 
 # Arguments
 NUM_TRAIN_EXAMPLES=${1:-8192}
@@ -92,10 +95,11 @@ else
 fi
 
 SAVE_NAME="lens_ex${NUM_TRAIN_EXAMPLES}_rm${REMOVE_COEF}_ret${RETAIN_COEF}"
+MODEL_PATH="$REPO_ROOT/models/deep-ignorance-unfiltered_${SAVE_NAME}"
 
 NUM_GPUS=4
 echo "===== Training with $NUM_GPUS GPUs ====="
-echo "Command: torchrun --nproc_per_node=$NUM_GPUS -m unlearn.algorithm.lens_unlearn --lens_path=$LENS_DIR --num_train_examples=$NUM_TRAIN_EXAMPLES --remove_coef=$REMOVE_COEF --retain_coef=$RETAIN_COEF --pdbs=4 --model_name=EleutherAI/deep-ignorance-unfiltered --save_name=$SAVE_NAME"
+echo "Command: torchrun --nproc_per_node=$NUM_GPUS -m unlearn.algorithm.lens_unlearn --lens_path=$LENS_DIR --num_train_examples=$NUM_TRAIN_EXAMPLES --remove_coef=$REMOVE_COEF --retain_coef=$RETAIN_COEF --pdbs=4 --model_name=EleutherAI/deep-ignorance-unfiltered --save_path=$MODEL_PATH"
 
 torchrun --nproc_per_node=$NUM_GPUS -m unlearn.algorithm.lens_unlearn \
     --lens_path=$LENS_DIR \
@@ -104,9 +108,7 @@ torchrun --nproc_per_node=$NUM_GPUS -m unlearn.algorithm.lens_unlearn \
     --retain_coef=$RETAIN_COEF \
     --pdbs=4 \
     --model_name=EleutherAI/deep-ignorance-unfiltered \
-    --save_name=$SAVE_NAME
-
-MODEL_PATH="./models/EleutherAI_deep-ignorance-unfiltered_${SAVE_NAME}"
+    --save_path=$MODEL_PATH
 
 echo "===== WMDP Bio Eval ====="
 HF_DATASETS_TRUST_REMOTE_CODE=1 accelerate launch --num_processes 4 -m lm_eval --model hf \

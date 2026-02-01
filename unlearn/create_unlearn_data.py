@@ -148,7 +148,7 @@ def load_datasets():
             return str(full_path)
         return path
 
-    bio_forget_path = resolve_path(bio_forget_path)
+    bio_forget_path = resolve_path(bio_forget_path)  # noqa: F823
     rewritten_path = resolve_path(wmdp_rewritten_path)
     retain_path = resolve_path(bio_retain_path)
 

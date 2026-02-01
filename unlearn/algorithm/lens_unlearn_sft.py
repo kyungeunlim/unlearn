@@ -303,7 +303,7 @@ class LensSftUnlearnConfig:
     remove_coef: float = 5.0
     layers: list[int] = field(default_factory=lambda: [5, 10, 15, 20, 25, 30])
     model_name: str = "EleutherAI/deep-ignorance-unfiltered"
-    save_name: str = ""
+    save_path: str = ""
     revision: str = "main"
     lens_path: str = ""
     skip_eval: bool = False
@@ -398,8 +398,8 @@ if __name__ == "__main__":
     model.train()
     trainer.train()
 
-    if run_cfg.save_name:
-        save_checkpoint(trainer, run_cfg, tokenizer)
+    if run_cfg.save_path:
+        save_checkpoint(trainer, run_cfg.save_path, tokenizer)
 
     if dist.is_initialized():
         dist.destroy_process_group()

@@ -410,7 +410,8 @@ library_name: safetensors
 
 # Affine Transform: {source_model_name} → {target_model_name}
 
-Learned affine transformation mapping hidden state activations from a source checkpoint to a target model.
+Learned affine transformation mapping hidden state activations
+from a source checkpoint to a target model.
 
 ## Usage
 
@@ -420,7 +421,10 @@ import torch.nn as nn
 from huggingface_hub import hf_hub_download
 
 # Download files
-weights_path = hf_hub_download(repo_id="{repo_id}", filename="affine_transforms.safetensors")
+weights_path = hf_hub_download(
+    repo_id="{repo_id}",
+    filename="affine_transforms.safetensors",
+)
 metadata_path = hf_hub_download(repo_id="{repo_id}", filename="metadata.json")
 
 # Load

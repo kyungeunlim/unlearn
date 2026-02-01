@@ -30,6 +30,10 @@ def run_training(
     orth_coef: float, remove_coef: float, save_name: str, cfg: TuningConfig
 ) -> bool:
     """Run training with specified coefficients."""
+    model_path = os.path.join(
+        cfg.models_dir,
+        cfg.model_name.replace("/", "_") + "_" + save_name,
+    )
     cmd = [
         "python",
         "-m",
@@ -40,7 +44,7 @@ def run_training(
         f"--num_train_examples={cfg.num_train_examples}",
         f"--pdbs={cfg.pdbs}",
         f"--model_name={cfg.model_name}",
-        f"--save_name={save_name}",
+        f"--save_path={model_path}",
     ]
 
     print(f"Running training command: {' '.join(cmd)}")

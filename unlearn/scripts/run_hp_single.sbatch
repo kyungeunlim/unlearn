@@ -62,6 +62,7 @@ if ! python -c "import torch; exit(0 if torch.cuda.is_available() else 1)"; then
 fi
 
 SAVE_NAME="rm${REMOVE_COEF}_orth${ORTH_COEF}"
+MODEL_PATH="./models/EleutherAI_deep-ignorance-unfiltered_${SAVE_NAME}"
 
 echo "===== Training ====="
 python -m unlearn.algorithm.orth_circuit_breakers \
@@ -71,9 +72,7 @@ python -m unlearn.algorithm.orth_circuit_breakers \
     --num_train_examples=1024 \
     --pdbs=4 \
     --model_name=EleutherAI/deep-ignorance-unfiltered \
-    --save_name=$SAVE_NAME
-
-MODEL_PATH="./models/EleutherAI_deep-ignorance-unfiltered_${SAVE_NAME}"
+    --save_path=$MODEL_PATH
 
 echo "===== WMDP Bio Eval ====="
 HF_DATASETS_TRUST_REMOTE_CODE=1 accelerate launch --num_processes 4 -m lm_eval --model hf \

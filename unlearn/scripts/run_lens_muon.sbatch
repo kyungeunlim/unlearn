@@ -72,6 +72,7 @@ if [ "$OPTIMIZER" = "adamw" ]; then
 else
     SAVE_NAME="lens_ex${NUM_TRAIN_EXAMPLES}_muon${MUON_LR}_rm${REMOVE_COEF}_rt${RETAIN_COEF}_ep${EPOCHS}"
 fi
+MODEL_PATH="./models/EleutherAI/deep-ignorance-unfiltered_${SAVE_NAME}"
 
 NUM_GPUS=4
 MASTER_ADDR=$(scontrol show hostname $SLURM_NODELIST | head -n1)
@@ -90,7 +91,7 @@ CMD="torchrun --nnodes=$SLURM_NNODES --nproc_per_node=$NUM_GPUS \
     --epochs=$EPOCHS \
     --optimizer=$OPTIMIZER \
     --model_name=EleutherAI/deep-ignorance-unfiltered \
-    --save_name=$SAVE_NAME"
+    --save_path=$MODEL_PATH"
 
 echo "Command: $CMD"
 echo ""
@@ -102,8 +103,6 @@ if [ $EXIT_CODE -ne 0 ]; then
     echo "ERROR: Training failed with exit code $EXIT_CODE"
     exit $EXIT_CODE
 fi
-
-MODEL_PATH="./models/EleutherAI/deep-ignorance-unfiltered_${SAVE_NAME}"
 
 echo "===== WMDP Bio Eval ====="
 HF_DATASETS_TRUST_REMOTE_CODE=1 accelerate launch --num_processes 4 -m lm_eval --model hf \

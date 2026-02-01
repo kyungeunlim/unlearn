@@ -47,8 +47,8 @@ def run_training(hp_cfg: HPConfig, output_dir: str, job_name: str) -> Optional[s
         "--remove_coef",
         str(hp_cfg.remove_coef),
         "--retain_kl_loss",
-        "--save_name",
-        save_name,
+        "--save_path",
+        f"./models/EleutherAI/deep-ignorance-unfiltered_{save_name}",
     ]
 
     print(f"\n{'='*60}")
