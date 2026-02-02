@@ -36,8 +36,9 @@ Retain L2 computed at fixed layers [5,10,15,20,25,30], not at the current target
 | 6 | 28→16 (step 4) | 50 | 5 | 1280 | 0.2535 | 0.2540 | 10x examples, MMLU collapsed |
 | 7 | 28→16 (step 4) | 50 | 5 | 128 | 0.2535 | 0.2540 | Hook migration v1 (4-layer retain), Job 2088651 |
 | 8 | 28→16 (step 4) | 50 | 5 | 128 | 0.3076 | 0.4488 | Hook migration v2 (all-layer retain), Job 2088695 |
-| 9 | 28→16 (step 4) | 50 | 5 | 128 | | | +ultrachat |
+| 9 | 28→16 (step 4) | 50 | 5 | 128 | 0.3191 | 0.4500 | +ultrachat |
 | 10 | 28→16 (step 4) | 50 | 5 | 128 | 0.2823 | 0.4303 | Replication of run 5, Job 2110179 |
+| 11 | 28→16 (step 4) | 50 | 2 | 128 | | | +ultrachat, Job 2110779 |
 
 ### KL Retain Loss (LoRA) - Worse Than L2 Norm Activation Retain
 
@@ -75,11 +76,11 @@ Retain L2 computed at the current target layer's output. Only the target layer's
 | 1 | 31→11 (step 4) | 5 | 5 | 2e-4 | 768 | 1.28 | 1.93 | 0.3929 | 0.4462 | Job 2110034 |
 | 2 | 31→11 (step 4) | 14 | 1 | 2e-4 | 768 | 1.70 | 1.61 | **0.2834** | **0.4239** | Job 2110068 |
 | 3 | 31→1 (step 2) | 14 | 2 | 2e-4 | 2048 | | | | | Job 2110099, OOM at step ~1024 |
-| 4 | 31→1 (step 2) | 10 | 2 | 2e-4 | 2048 | | | | | Job 2110618 |
-| 5 | 31→1 (step 2) | 5 | 2 | 2e-4 | 2048 | | | | | Job 2110619 |
-| 6 | 31→1 (step 2) | 2 | 2 | 2e-4 | 2048 | | | | | Job 2110620 |
-| 7 | 31→1 (step 2) | 1 | 2 | 2e-4 | 2048 | | | | | Job 2110621 |
-| 8 | 31→11 (step 4) | 14 | 1 | 2e-4 | 768 | | | | | +ultrachat |
+| 4 | 31→1 (step 2) | 10 | 2 | 2e-4 | 2048 | 0.15 | 1.94 | 0.2730 | 0.3618 | Job 2110783 |
+| 5 | 31→1 (step 2) | 5 | 2 | 2e-4 | 2048 | 0.15 | 1.94 | 0.3065 | 0.4034 | Job 2110784 |
+| 6 | 31→1 (step 2) | 2 | 2 | 2e-4 | 2048 | 0.14 | 1.94 | 0.3514 | 0.4328 | Job 2110785 |
+| 7 | 31→1 (step 2) | 1 | 2 | 2e-4 | 2048 | 0.14 | 2.00 | 0.3917 | 0.4447 | Job 2110786 |
+| 8 | 31→11 (step 4) | 14 | 1 | 2e-4 | 768 | 5.53 | 1.61 | **0.2949** | **0.4199** | +ultrachat |
 
 ### Max Entropy KL Forget Loss, KL Retain Loss (Naive SFT, breaks differential unlearning)
 
@@ -118,10 +119,10 @@ All ablations use max entropy KL forget loss, KL retain loss (on final logits, g
 |-----|--------|-------------|-------------|-----|-------|-------------|-------------|-----------------|------|-------|
 | 29 | 31→11 (step 4) | 5 | 200 | 2e-4 | 768 | 1.70 | 1.87 | **0.3986** | **0.4519** | nll_retain |
 | 39 | 31→1 (step 2) | 5 | 200 | 2e-4 | 2048 | 0.97 | 1.97 | **0.3825** | **0.4387** | nll_retain, full model, Job 2110137 |
-| 41 | 31→1 (step 2) | 10 | 200 | 2e-4 | 2048 | | | | | nll_retain, full model |
-| 42 | 31→1 (step 2) | 10 | 500 | 2e-4 | 2048 | | | | | nll_retain, full model |
-| 43 | 31→1 (step 2) | 5 | 500 | 2e-4 | 2048 | | | | | nll_retain, full model |
-| 44 | 31→1 (step 2) | 2 | 200 | 2e-4 | 2048 | | | | | nll_retain, full model |
+| 41 | 31→1 (step 2) | 10 | 200 | 2e-4 | 2048 | 1.00 | 2.00 | **0.3733** | **0.4239** | nll_retain, full model, Job 2110614 |
+| 42 | 31→1 (step 2) | 10 | 500 | 2e-4 | 2048 | 1.00 | 1.94 | **0.3859** | **0.4385** | nll_retain, full model, Job 2110615 |
+| 43 | 31→1 (step 2) | 5 | 500 | 2e-4 | 2048 | 1.01 | 1.94 | **0.4021** | **0.4410** | nll_retain, full model, Job 2110616 |
+| 44 | 31→1 (step 2) | 2 | 200 | 2e-4 | 2048 | 0.95 | 2.00 | **0.3975** | **0.4412** | nll_retain, full model, Job 2110617 |
 
 ### Same-Sign Grads (Some Unlearning, Partial MMLU Degradation)
 
@@ -200,6 +201,17 @@ L2-SP regularization without gradient filtering. l2sp_coef=0.01.
 | 37 | 31→11 (step 4) | 20 | 5 | 1e-3 | 0.01 | 768 | 81.46 | 1.94 | 0.4055 | 0.4194 | |
 | 38 | 31→11 (step 4) | 2 | 30 | 1e-3 | 0.01 | 768 | 930.06 | 1.95 | 0.4274 | 0.4588 | No effect |
 | 40 | 31→11 (step 4) | 2 | 30 | 1e-3 | 0.01 | 768 | 930.06 | 1.95 | 0.4274 | 0.4588 | +ultrachat, no effect. Job 2110091 |
+
+### DPO-Style Forget Loss, KL Retain Loss
+
+NPO loss on forget data routed through frozen remaining layers: -log sigmoid(-beta * (log_prob_current - log_prob_ref)). Compared against Run 24 (max-entropy KL forget, same config).
+
+| Run | Layers | remove_coef | retain_coef | lr | dpo_beta | Steps | retain_loss | forget_loss | WMDP Bio Robust | MMLU | Notes |
+|-----|--------|-------------|-------------|-----|----------|-------|-------------|-------------|-----------------|------|-------|
+| - | - | - | - | - | - | - | - | - | 0.4297 | 0.4510 | Baseline |
+| 24 | 31→11 (step 4) | 5 | 200 | 2e-4 | - | 768 | 186.70 | 1.96 | 0.3629 | 0.3821 | max_entropy_kl (reference) |
+| 45 | 31→11 (step 4) | 5 | 200 | 2e-4 | 0.1 | 768 | 5.40 | 0.69 | 0.4274 | 0.4523 | No effect |
+| 46 | 31→11 (step 4) | 5 | 200 | 2e-4 | 10.0 | 768 | 4.95 | 0.69 | 0.4309 | 0.4525 | No effect |
 
 ## Default Hyperparameters
 

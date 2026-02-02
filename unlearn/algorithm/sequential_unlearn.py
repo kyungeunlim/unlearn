@@ -365,6 +365,7 @@ class SequentialUnlearnConfig:
     revision: str = "main"
     epochs_per_layer: int = 1
     use_max_entropy_kl: bool = False
+    use_ultrachat: bool = True
 
 
 def main():
@@ -461,7 +462,7 @@ def main():
             train_dataset=train_dataset,
             tokenizer=tokenizer,
             target_layer=layer_idx,
-            retain_layers=[layer_idx],
+            retain_layers=run_cfg.retain_layers,
         )
 
         model.train()

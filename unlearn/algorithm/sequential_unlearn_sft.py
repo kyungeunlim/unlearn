@@ -20,6 +20,7 @@ from transformers.trainer_utils import seed_worker
 import wandb
 from unlearn.algorithm.sequential_unlearn import forward_from_layer
 from unlearn.utils.math import max_entropy_kl_loss
+from unlearn.utils.muon import MuonAdamW
 from unlearn.utils.unlearning_dataset import get_unlearning_dataset
 from unlearn.utils.worker_utils import get_model_and_tokenizer, save_checkpoint
 
@@ -72,6 +73,17 @@ class SequentialSftTrainer(Trainer):
         return self.accelerator.prepare(
             DataLoader(self.train_dataset, **dataloader_params)
         )  # type: ignore
+
+    def create_optimizer(self):
+        if self.run_args.optimizer == "muon":
+            self.optimizer = MuonAdamW(
+                self.model.parameters(),
+                lr=self.run_args.lr,
+                muon_momentum=self.run_args.muon_momentum,
+                weight_decay=self.args.weight_decay,
+            )
+            return self.optimizer
+        return super().create_optimizer()
 
     def _get_phase_info(self):
         """Handles scheduled information, including the current targeted layer
@@ -194,32 +206,68 @@ class SequentialSftTrainer(Trainer):
         mask = forget_attention_mask.bool().to(logits.device)
         logits_masked = logits[mask]
 
-        if logits_masked.numel() > 0:
-            if self.run_args.use_max_entropy_kl:
-                vocab_size = logits.shape[-1]
-                log_vocab = torch.log(
-                    torch.tensor(float(vocab_size), device=target_device)
-                )
-                return (
-                    max_entropy_kl_loss(logits_masked).to(target_device) / log_vocab
-                    + dummy_loss
-                )
-            else:
-                vocab_size = logits.shape[-1]
-                batch_size, seq_len = logits.shape[:2]
-                random_targets = torch.randint(
-                    0, vocab_size, (batch_size, seq_len), device=logits.device
-                )
-                targets_flat = random_targets[mask]
-                ce_loss = F.cross_entropy(
-                    logits_masked.float(), targets_flat, reduction="mean"
-                )
-                log_vocab = torch.log(
-                    torch.tensor(float(vocab_size), device=target_device)
-                )
-                return (ce_loss / log_vocab).to(target_device) + dummy_loss
-        else:
+        if logits_masked.numel() == 0:
             return dummy_loss
+
+        if self.run_args.use_dpo_forget:
+            # Reference logits: frozen model's hidden states through
+            # the same frozen remaining layers, so both paths are comparable.
+            with torch.no_grad():
+                ref_outputs = self.frozen_model(
+                    forget_input_ids.to(orig_device),
+                    attention_mask=forget_attention_mask.to(orig_device),
+                    output_hidden_states=True,
+                )
+                ref_hidden = ref_outputs.hidden_states[target_layer + 1]
+                ref_logits = forward_from_layer(
+                    self.frozen_model,
+                    ref_hidden,
+                    target_layer + 1,
+                )
+
+            # Per-token log probs (shifted for next-token prediction)
+            shift_current = logits[:, :-1, :].float()
+            shift_ref = ref_logits[:, :-1, :].float()
+            shift_labels = forget_input_ids[:, 1:].to(logits.device)
+            shift_mask = forget_attention_mask[:, 1:].bool().to(logits.device)
+
+            current_lp = F.log_softmax(shift_current, dim=-1)
+            ref_lp = F.log_softmax(shift_ref, dim=-1)
+
+            current_token_lp = current_lp.gather(
+                -1, shift_labels.unsqueeze(-1)
+            ).squeeze(-1)
+            ref_token_lp = ref_lp.gather(-1, shift_labels.unsqueeze(-1)).squeeze(-1)
+
+            # Per-token log ratio, averaged over non-padding tokens
+            token_log_ratios = (current_token_lp - ref_token_lp) * shift_mask
+            seq_lengths = shift_mask.sum(dim=-1).clamp(min=1)
+            avg_log_ratios = token_log_ratios.sum(dim=-1) / seq_lengths
+
+            # NPO: -log sigmoid(-beta * avg_log_ratio)
+            beta = self.run_args.dpo_beta
+            loss = -F.logsigmoid(-beta * avg_log_ratios).mean()
+            return loss.to(target_device) + dummy_loss
+
+        elif self.run_args.use_max_entropy_kl:
+            vocab_size = logits.shape[-1]
+            log_vocab = torch.log(torch.tensor(float(vocab_size), device=target_device))
+            return (
+                max_entropy_kl_loss(logits_masked).to(target_device) / log_vocab
+                + dummy_loss
+            )
+        else:
+            vocab_size = logits.shape[-1]
+            batch_size, seq_len = logits.shape[:2]
+            random_targets = torch.randint(
+                0, vocab_size, (batch_size, seq_len), device=logits.device
+            )
+            targets_flat = random_targets[mask]
+            ce_loss = F.cross_entropy(
+                logits_masked.float(), targets_flat, reduction="mean"
+            )
+            log_vocab = torch.log(torch.tensor(float(vocab_size), device=target_device))
+            return (ce_loss / log_vocab).to(target_device) + dummy_loss
 
     def _freeze_and_log(self, model, current_step, target_layer, extra=""):
         target_str = f".layers.{target_layer}."
@@ -423,6 +471,10 @@ class SequentialSftUnlearnConfig:
     l2sp_coef: float = 0.0
     max_grad_norm: float = 1.0
     retain_loss_type: Literal["kl", "l2", "nll"] = "kl"
+    use_dpo_forget: bool = False
+    dpo_beta: float = 0.1
+    optimizer: Literal["muon", "adamw"] = "adamw"
+    muon_momentum: float = 0.95
     wandb_project: str = ""
 
 
@@ -479,6 +531,8 @@ if __name__ == "__main__":
         run_cfg.epochs_per_layer * len(train_dataset) // (world_size * run_cfg.pdbs),
     )
     total_epochs = run_cfg.epochs_per_layer * len(layers_to_unlearn)
+
+    use_muon = run_cfg.optimizer == "muon"
 
     print(
         f"Running with {world_size} GPUs. Per device batch: {run_cfg.pdbs}. "
