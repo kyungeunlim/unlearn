@@ -46,9 +46,9 @@ Retain KL computed on final logits. Gradients flow through all LoRA params inclu
 | - | - | - | - | - | 0.4297 | 0.4510 | Baseline |
 | 1 | 28→16 (step 4) | 50 | 5 | 128 | 0.2673 | 0.2295 | Collapsed |
 | 7 | 28→16 (step 4) | 5 | 50 | 128 | 0.2730 | 0.4034 | Works |
-| 8 | 28→16 (step 4) | 5 | 100 | 128 | **0.2788** | **0.4195** | Best KL |
+| 8 | 28→16 (step 4) | 5 | 100 | 128 | **0.2788** | **0.4195** | |
 | 9 | 28→16 (step 4) | 5 | 100 | 1280 | 0.2673 | 0.2295 | 10x examples |
-| 12 | 28→16 (step 4) | 5 | 100 | 128 | **0.3237** | **0.4375** | Hook off-by-one fix, Job 2109953 |
+| 12 | 28→16 (step 4) | 5 | 100 | 128 | **0.3237** | **0.4375** | |
 
 ### Max Entropy KL Forget Loss, L2 Retain Loss (LoRA)
 
@@ -59,9 +59,9 @@ Retain L2 computed at fixed layers [5,10,15,20,25,30], not at the current target
 | Run | Layers | remove_coef | retain_coef | Steps | retain_loss | forget_loss | WMDP Bio Robust | MMLU | Notes |
 |-----|--------|-------------|-------------|-------|-------------|-------------|-----------------|------|-------|
 | - | - | - | - | - | - | - | 0.4297 | 0.4510 | Baseline |
-| 1 | 31→11 (step 4) | 10 | 5 | 192 | 2.55 | 1.05 | 0.2857 | 0.4067 | |
+| 1 | 31→11 (step 4) | 10 | 5 | 192 | 2.55 | 1.05 | **0.2857** | **0.4067** | |
 
-### Max Entropy KL Forget Loss, L2 Retain Loss (SFT)
+### Max Entropy KL Forget Loss, L2 Retain Loss (SFT, some MMLU degradation, more unlearning)
 
 1024 examples, layers 31→8 (step 4), 2 nodes / 8 GPUs, pdbs=1, grad_accum=4, 128 steps/phase, 768 total steps.
 
@@ -71,7 +71,8 @@ Retain L2 computed at the current target layer's output. Only the target layer's
 |-----|--------|-------------|-------------|-----|-------|-------------|-------------|-----------------|------|-------|
 | - | - | - | - | - | - | - | - | 0.4297 | 0.4510 | Baseline |
 | 1 | 31→11 (step 4) | 5 | 5 | 2e-4 | 768 | 1.28 | 1.93 | 0.3929 | 0.4462 | Job 2110034 |
-| 2 | 31→11 (step 4) | 14 | 1 | 2e-4 | 768 | 1.70 | 1.61 | 0.2834 | 0.4239 | Job 2110068 |
+| 2 | 31→11 (step 4) | 14 | 1 | 2e-4 | 768 | 1.70 | 1.61 | **0.2834** | **0.4239** | Job 2110068 |
+| 3 | 31→1 (step 2) | 14 | 2 | 2e-4 | 2048 | | | | | Whole model |
 
 ### Max Entropy KL Forget Loss, KL Retain Loss (Naive SFT, breaks differential unlearning)
 
@@ -82,30 +83,33 @@ Retain KL computed on final logits. Gradients flow through all layers but only t
 | Run | Layers | remove_coef | retain_coef | lr | Steps | retain_loss | forget_loss | WMDP Bio Robust | MMLU | Notes |
 |-----|--------|-------------|-------------|-----|-------|-------------|-------------|-----------------|------|-------|
 | 18 | 31→11 (step 4) | 5 | 80 | 1e-4 | 768 | 88.39 | 1.96 | 0.4251 | 0.4378 | No effect |
-| 19 | 31→11 (step 4) | 5 | 200 | 1e-4 | 768 | 67.19 | 1.97 | 0.4251 | 0.4401 | No effect |
-| 20 | 31→11 (step 4) | 5 | 400 | 1e-4 | 768 | 70.40 | 1.97 | 0.4286 | 0.4325 | No effect |
 | 21 | 31→11 (step 4) | 5 | 2000 | 1e-4 | 768 | 73.30 | 1.98 | 0.4286 | 0.4363 | No effect |
 
 | Run | Layers | remove_coef | retain_coef | lr | Steps | retain_loss | forget_loss | WMDP Bio Robust | MMLU | Notes |
 |-----|--------|-------------|-------------|-----|-------|-------------|-------------|-----------------|------|-------|
-| 26 | 31→11 (step 4) | 5 | 200 | 3e-4 | 768 | 165.14 | 1.92 | 0.3134 | 0.3186 | Collapsed |
-| 27 | 31→11 (step 4) | 5 | 2000 | 3e-4 | 768 | 208.31 | 1.82 | 0.3065 | 0.3154 | Collapsed |
+| 26 | 31→11 (step 4) | 5 | 200 | 3e-4 | 768 | 165.14 | 1.92 | 0.3134 | 0.3186 | Twin Degradation |
+| 27 | 31→11 (step 4) | 5 | 2000 | 3e-4 | 768 | 208.31 | 1.82 | 0.3065 | 0.3154 | Twin Degradation |
 
 | Run | Layers | remove_coef | retain_coef | lr | Steps | retain_loss | forget_loss | WMDP Bio Robust | MMLU | Notes |
 |-----|--------|-------------|-------------|-----|-------|-------------|-------------|-----------------|------|-------|
-| 22 | 31→11 (step 4) | 5 | 200 | 1.5e-4 | 768 | 98.78 | 1.95 | 0.4009 | 0.4241 | |
-| 23 | 31→11 (step 4) | 5 | 2000 | 1.5e-4 | 768 | 93.86 | 1.98 | 0.4055 | 0.4139 | |
+| 22 | 31→11 (step 4) | 5 | 200 | 1.5e-4 | 768 | 98.78 | 1.95 | 0.4009 | 0.4241 | Twin Degradation |
+| 23 | 31→11 (step 4) | 5 | 2000 | 1.5e-4 | 768 | 93.86 | 1.98 | 0.4055 | 0.4139 | Twin Degradation |
 
 | Run | Layers | remove_coef | retain_coef | lr | Steps | retain_loss | forget_loss | WMDP Bio Robust | MMLU | Notes |
 |-----|--------|-------------|-------------|-----|-------|-------------|-------------|-----------------|------|-------|
-| 24 | 31→11 (step 4) | 5 | 200 | 2e-4 | 768 | 186.70 | 1.96 | 0.3629 | 0.3821 | |
-| 25 | 31→11 (step 4) | 5 | 2000 | 2e-4 | 768 | 125.33 | 1.97 | 0.3675 | 0.3945 | |
+| 24 | 31→11 (step 4) | 5 | 200 | 2e-4 | 768 | 186.70 | 1.96 | 0.3629 | 0.3821 | Twin Degradation |
+| 25 | 31→11 (step 4) | 5 | 2000 | 2e-4 | 768 | 125.33 | 1.97 | 0.3675 | 0.3945 | Twin Degradation |
 | 28 | 31→11 (step 4) | 5 | 200 | 2e-4 | 768 | 8.57 | 2.03 | 0.4343 | 0.4528 | max_grad_norm=0 |
-| 29 | 31→11 (step 4) | 5 | 200 | 2e-4 | 768 | 1.70 | 1.87 | 0.3986 | 0.4519 | nll_retain |
 
-## Stabilizing SFT - Ablations
+## Stabilizing SFT KL Retain Loss - Ablations
 
 All ablations use max entropy KL forget loss, KL retain loss (on final logits, gradients flow through all layers but only target layer's grads kept), full SFT with same-sign gradient filtering and layer-wise gradient freezing. 1024 examples, layers 31→8 (step 4), 2 nodes / 8 GPUs, pdbs=1, grad_accum=4, 128 steps/phase, 768 total steps.
+
+### Max Entropy KL Forget Loss, NLL Retain Loss (Potential unlearning, good retention)
+
+| Run | Layers | remove_coef | retain_coef | lr | Steps | retain_loss | forget_loss | WMDP Bio Robust | MMLU | Notes |
+|-----|--------|-------------|-------------|-----|-------|-------------|-------------|-----------------|------|-------|
+| 29 | 31→11 (step 4) | 5 | 200 | 2e-4 | 768 | 1.70 | 1.87 | **0.3986** | **0.4519** | nll_retain |
 
 ### Same-Sign Grads (Some Unlearning, Partial MMLU Degradation)
 
