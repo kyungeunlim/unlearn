@@ -1,7 +1,7 @@
 """Sequential back-to-front unlearning (SFT - full parameter training with FSDP)."""
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Literal, cast
 
 import torch
@@ -135,8 +135,12 @@ class SequentialSftTrainer(Trainer):
 
         return F.cross_entropy(shift_logits.float(), shift_labels, reduction="mean")
 
-    def _compute_l2_retain_loss(self, model, inputs, target_device):
-        """L2 distance between current and original hidden states at retain_layers."""
+    def _compute_l2_retain_loss(self, model, inputs, target_layer, target_device):
+        """L2 distance between current and original hidden states at the target layer.
+
+        Only the target layer's output (hidden_states[target_layer + 1]) produces
+        meaningful gradients, since _freeze_and_log zeroes all other layers' grads.
+        """
         retain_input_ids = inputs["input_ids"].to(target_device)
 
         with torch.no_grad():
@@ -150,16 +154,10 @@ class SequentialSftTrainer(Trainer):
             output_hidden_states=True,
         )
 
-        retain_loss = torch.tensor(0.0, device=target_device)
         # hidden_states[L+1] is the output of layer L
-        for layer_idx in self.run_args.retain_layers:
-            ref_h = ref_outputs.hidden_states[layer_idx + 1].to(target_device)
-            cur_h = current_outputs.hidden_states[layer_idx + 1]
-            retain_loss = (
-                retain_loss
-                + torch.norm(cur_h - ref_h, dim=-1, p=2, dtype=torch.float).mean()
-            )
-        return retain_loss / len(self.run_args.retain_layers)
+        ref_h = ref_outputs.hidden_states[target_layer + 1].to(target_device)
+        cur_h = current_outputs.hidden_states[target_layer + 1]
+        return torch.norm(cur_h - ref_h, dim=-1, p=2, dtype=torch.float).mean()
 
     def _compute_forget_loss(self, model, inputs, target_layer, target_device):
         """The loss on forget data when routing the activations at the current
@@ -287,7 +285,9 @@ class SequentialSftTrainer(Trainer):
         if self.run_args.retain_loss_type == "nll":
             retain_loss = self._compute_nll_retain_loss(model, inputs, target_device)
         elif self.run_args.retain_loss_type == "l2":
-            retain_loss = self._compute_l2_retain_loss(model, inputs, target_device)
+            retain_loss = self._compute_l2_retain_loss(
+                model, inputs, target_layer, target_device
+            )
         else:
             retain_loss = self._compute_retain_loss(model, inputs, target_device)
         if l2sp_handle is not None:
@@ -424,7 +424,6 @@ class SequentialSftUnlearnConfig:
     l2sp_coef: float = 0.0
     max_grad_norm: float = 1.0
     retain_loss_type: Literal["kl", "l2", "nll"] = "kl"
-    retain_layers: list[int] = field(default_factory=lambda: [5, 10, 15, 20, 25, 30])
     wandb_project: str = ""
 
 

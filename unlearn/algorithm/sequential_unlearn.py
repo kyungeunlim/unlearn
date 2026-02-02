@@ -461,7 +461,7 @@ def main():
             train_dataset=train_dataset,
             tokenizer=tokenizer,
             target_layer=layer_idx,
-            retain_layers=run_cfg.retain_layers,
+            retain_layers=[layer_idx],
         )
 
         model.train()

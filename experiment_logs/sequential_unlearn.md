@@ -23,6 +23,8 @@ Note that hyperparameters don't transfer between number of training steps.
 
 ### L2 Norm Retain Loss (LoRA)
 
+Retain L2 computed at fixed layers [5,10,15,20,25,30], not at the current target layer. LoRA params in all layers receive gradient regardless, so retain gradients were non-zero, but the L2 constraint was on different layers than the forget target.
+
 | Run | Layers | remove_coef | retain_coef | Steps | WMDP Bio Robust | MMLU | Notes |
 |-----|--------|-------------|-------------|-------|-----------------|------|-------|
 | - | - | - | - | - | 0.4297 | 0.4510 | Baseline |
@@ -37,6 +39,8 @@ Note that hyperparameters don't transfer between number of training steps.
 
 ### KL Retain Loss (LoRA) - Worse Than L2 Norm Activation Retain
 
+Retain KL computed on final logits. Gradients flow through all LoRA params including the target layer.
+
 | Run | Layers | remove_coef | retain_coef | Steps | WMDP Bio Robust | MMLU | Notes |
 |-----|--------|-------------|-------------|-------|-----------------|------|-------|
 | - | - | - | - | - | 0.4297 | 0.4510 | Baseline |
@@ -50,14 +54,29 @@ Note that hyperparameters don't transfer between number of training steps.
 
 1024 examples, layers 31→8 (step 4), 4 GPUs, pdbs=4, grad_accum=2, global batch 32, 32 steps/layer, 192 total steps.
 
+Retain L2 computed at fixed layers [5,10,15,20,25,30], not at the current target layer. LoRA params in all layers receive gradient regardless, so retain gradients were non-zero, but the L2 constraint was on different layers than the forget target.
+
 | Run | Layers | remove_coef | retain_coef | Steps | retain_loss | forget_loss | WMDP Bio Robust | MMLU | Notes |
 |-----|--------|-------------|-------------|-------|-------------|-------------|-----------------|------|-------|
 | - | - | - | - | - | - | - | 0.4297 | 0.4510 | Baseline |
 | 1 | 31→11 (step 4) | 10 | 5 | 192 | 2.55 | 1.05 | 0.2857 | 0.4067 | |
 
+### Max Entropy KL Forget Loss, L2 Retain Loss (SFT)
+
+1024 examples, layers 31→8 (step 4), 2 nodes / 8 GPUs, pdbs=1, grad_accum=4, 128 steps/phase, 768 total steps.
+
+Retain L2 computed at the current target layer's output. Only the target layer's parameters are unfrozen per phase.
+
+| Run | Layers | remove_coef | retain_coef | lr | Steps | retain_loss | forget_loss | WMDP Bio Robust | MMLU | Notes |
+|-----|--------|-------------|-------------|-----|-------|-------------|-------------|-----------------|------|-------|
+| - | - | - | - | - | - | - | - | 0.4297 | 0.4510 | Baseline |
+| 1 | 31→11 (step 4) | 5 | 5 | 2e-4 | 768 | 1.28 | 1.93 | 0.3929 | 0.4462 | Job 2110034 |
+
 ### Max Entropy KL Forget Loss, KL Retain Loss (Naive SFT, breaks differential unlearning)
 
 1024 examples, layers 31→8 (step 4), 2 nodes / 8 GPUs, pdbs=1, grad_accum=4, 128 steps/phase, 768 total steps.
+
+Retain KL computed on final logits. Gradients flow through all layers but only the target layer's grads are kept.
 
 | Run | Layers | remove_coef | retain_coef | lr | Steps | retain_loss | forget_loss | WMDP Bio Robust | MMLU | Notes |
 |-----|--------|-------------|-------------|-----|-------|-------------|-------------|-----------------|------|-------|
@@ -85,7 +104,7 @@ Note that hyperparameters don't transfer between number of training steps.
 
 ## Stabilizing SFT - Ablations
 
-All ablations use max entropy KL forget loss, KL retain loss, full SFT with same-sign gradient filtering and layer-wise gradient freezing. 1024 examples, layers 31→8 (step 4), 2 nodes / 8 GPUs, pdbs=1, grad_accum=4, 128 steps/phase, 768 total steps.
+All ablations use max entropy KL forget loss, KL retain loss (on final logits, gradients flow through all layers but only target layer's grads kept), full SFT with same-sign gradient filtering and layer-wise gradient freezing. 1024 examples, layers 31→8 (step 4), 2 nodes / 8 GPUs, pdbs=1, grad_accum=4, 128 steps/phase, 768 total steps.
 
 ### Same-Sign Grads (Some Unlearning, Partial MMLU Degradation)
 
@@ -98,7 +117,7 @@ Separate backward passes for retain and forget losses. Only update parameter ele
 | 2 | 31→11 (step 4) | 5 | 80 | 2e-4 | 768 | 126.52 | 1.56 | 0.2938 | 0.3787 | |
 | 3 | 31→11 (step 4) | 5 | 200 | 2e-4 | 768 | 148.53 | 1.54 | 0.2938 | 0.3786 | |
 | 4 | 31→11 (step 4) | 5 | 2000 | 2e-4 | 768 | 126.40 | 1.56 | 0.2938 | 0.3782 | |
-| 29 | 31→11 (step 4) | 5 | 200 | 2e-4 | 768 | | | | | max_grad_norm=0.3 |
+| 29 | 31→11 (step 4) | 5 | 200 | 2e-4 | 768 | 148.45 | 1.54 | 0.2938 | 0.3793 | max_grad_norm=0.3 |
 
 ### Same-Sign + Asymmetric Filter (Little Unlearning)
 
@@ -136,19 +155,13 @@ L2-SP: regularize weights toward pretrained initialization (λ||w − w₀||²) 
 
 ### L2-SP Only (No Same-Sign, Asymmetric, or Ramp)
 
-L2-SP regularization without gradient filtering. l2sp_coef=0.01, retain_coef=200.
+L2-SP regularization without gradient filtering. l2sp_coef=0.01.
 
 | Run | Layers | remove_coef | retain_coef | lr | l2sp_coef | Steps | retain_loss | forget_loss | WMDP Bio Robust | MMLU | Notes |
 |-----|--------|-------------|-------------|-----|-----------|-------|-------------|-------------|-----------------|------|-------|
 | - | - | - | - | - | - | - | - | - | 0.4297 | 0.4510 | Baseline |
-| 21 | 31→11 (step 4) | 5 | 200 | 1e-4 | 0.01 | 768 | 3.08 | 1.92 | 0.4332 | | No effect |
-| 22 | 31→11 (step 4) | 10 | 200 | 1e-4 | 0.01 | 768 | 3.02 | 1.92 | 0.4320 | | No effect |
-| 23 | 31→11 (step 4) | 20 | 200 | 1e-4 | 0.01 | 768 | 3.40 | 1.92 | 0.4355 | | No effect |
-| 24 | 31→11 (step 4) | 40 | 200 | 1e-4 | 0.01 | 768 | 3.31 | 2.03 | 0.4366 | | No effect |
-| 25 | 31→11 (step 4) | 5 | 200 | 2e-4 | 0.01 | 768 | 11.03 | 2.03 | 0.4309 | | No effect |
-| 26 | 31→11 (step 4) | 10 | 200 | 2e-4 | 0.01 | 768 | 9.58 | 2.03 | 0.4343 | | No effect |
-| 27 | 31→11 (step 4) | 20 | 200 | 2e-4 | 0.01 | 768 | 10.69 | 1.92 | 0.4263 | | No effect |
 | 28 | 31→11 (step 4) | 40 | 200 | 2e-4 | 0.01 | 768 | 10.64 | 1.92 | 0.4297 | | No effect |
+| 32 | 31→11 (step 4) | 40 | 5 | 1e-4 | 0.01 | 768 | 3.77 | 1.88 | 0.4320 | | No effect |
 
 ## Default Hyperparameters
 
