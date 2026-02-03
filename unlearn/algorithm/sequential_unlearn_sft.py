@@ -485,9 +485,11 @@ class SequentialSftUnlearnConfig:
     muon_momentum: float = 0.95
     wandb_project: str = ""
     blocklist_path: str = ""
-    keyword_mask_method: Literal["regex", "activation"] = "regex"
+    keyword_mask_method: Literal["regex", "activation", "sae"] = "regex"
     activation_mask_threshold: float = 0.2
     activation_mask_layer: int = 16
+    sae_latents_path: str = ""
+    sae_mask_frac: float = 0.115
 
 
 if __name__ == "__main__":

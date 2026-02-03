@@ -1,4 +1,5 @@
 import csv
+import json
 import os
 import random
 import re
@@ -250,6 +251,157 @@ def add_activation_masks(
     return masked_dataset
 
 
+def add_sae_masks(
+    tokenized_dataset,
+    model_name,
+    latents_path,
+    cache_dir,
+    mask_frac,
+):
+    """Pre-compute per-token mask using SAE latent activation counts.
+
+    For each token, count how many WMDP-adjacent SAE features fire (appear in
+    the SAE's top-k indices). Mask the top mask_frac fraction of tokens by count.
+
+    Only rank 0 computes; other ranks poll for the cache file.
+    """
+    from sparsify import SparseCoder
+
+    done_marker = cache_dir + ".done"
+    if os.path.exists(done_marker):
+        print(f"Loading cached SAE masks from {cache_dir}")
+        return load_from_disk(cache_dir)
+
+    global_rank = int(os.environ.get("RANK", 0))
+    if global_rank != 0:
+        print(f"Rank {global_rank} waiting for SAE masks from rank 0...")
+        while not os.path.exists(done_marker):
+            time.sleep(10)
+        time.sleep(5)
+        print(f"Rank {global_rank} loading SAE masks from {cache_dir}")
+        return load_from_disk(cache_dir)
+
+    # --- Rank 0 only below ---
+    with open(latents_path) as f:
+        latents_config = json.load(f)
+
+    latents_by_hookpoint: dict[str, list[int]] = {}
+    for entry in latents_config["all_latents"]:
+        hp = entry["hookpoint"]
+        latents_by_hookpoint.setdefault(hp, []).append(entry["latent"])
+
+    hookpoints = sorted(latents_by_hookpoint.keys())
+    total_latents = sum(len(v) for v in latents_by_hookpoint.values())
+    print(
+        f"SAE mask: {total_latents} target latents across "
+        f"{len(hookpoints)} hookpoints: {hookpoints}"
+    )
+
+    sae_name = latents_config["sae"]
+    print(f"Loading SAEs from {sae_name}...")
+    from huggingface_hub import snapshot_download
+
+    sae_repo = Path(snapshot_download(sae_name))
+    # SAE layers may be nested in a subdirectory
+    if not any((sae_repo / hp).exists() for hp in hookpoints):
+        for subdir in sae_repo.iterdir():
+            if subdir.is_dir() and any((subdir / hp).exists() for hp in hookpoints):
+                sae_repo = subdir
+                break
+    saes = {
+        hp: SparseCoder.load_from_disk(sae_repo / hp, device="cuda", decoder=False)
+        for hp in hookpoints
+    }
+    for hp, sae in saes.items():
+        print(f"  {hp}: k={sae.cfg.k}, num_latents={sae.num_latents}, d_in={sae.d_in}")
+
+    print(f"Loading model {model_name} for SAE feature extraction...")
+    sae_model = AutoModelForCausalLM.from_pretrained(
+        model_name, torch_dtype=torch.bfloat16, device_map={"": 0}
+    )
+    sae_model.eval()
+
+    layer_indices = {hp: int(hp.split(".")[-1]) for hp in hookpoints}
+
+    batch_size = 2
+    all_counts = []
+    all_attn_masks = []
+
+    for batch_start in range(0, len(tokenized_dataset), batch_size):
+        batch_end = min(batch_start + batch_size, len(tokenized_dataset))
+        input_ids = torch.stack(
+            [
+                torch.tensor(tokenized_dataset[i]["input_ids"])
+                for i in range(batch_start, batch_end)
+            ]
+        ).cuda()
+        attn = torch.stack(
+            [
+                torch.tensor(tokenized_dataset[i]["attention_mask"])
+                for i in range(batch_start, batch_end)
+            ]
+        )
+
+        with torch.no_grad():
+            outputs = sae_model(input_ids, output_hidden_states=True)
+
+        bs, seq_len = input_ids.shape
+        counts = torch.zeros(bs, seq_len, dtype=torch.int32)
+
+        for hp, sae in saes.items():
+            layer_idx = layer_indices[hp]
+            hidden = outputs.hidden_states[layer_idx + 1]
+            hidden_flat = hidden.reshape(-1, hidden.shape[-1])
+            enc = sae.encode(hidden_flat)
+            top_indices = enc.top_indices.reshape(bs, seq_len, -1)
+
+            for lat_idx in latents_by_hookpoint[hp]:
+                matches = (top_indices == lat_idx).any(dim=-1)
+                counts += matches.cpu().int()
+
+        all_counts.append(counts)
+        all_attn_masks.append(attn)
+
+        if batch_start % (batch_size * 32) == 0:
+            print(f"  SAE mask progress: {batch_end}/{len(tokenized_dataset)}")
+
+    del sae_model, saes
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+
+    all_counts = torch.cat(all_counts, dim=0)
+    all_attn_masks = torch.cat(all_attn_masks, dim=0)
+
+    real_counts = all_counts[all_attn_masks.bool()]
+    max_count = int(real_counts.max().item())
+    for c in range(max_count + 1):
+        n = (real_counts == c).sum().item()
+        frac = n / len(real_counts)
+        print(f"  {c} latents: {n} tokens ({frac:.4f})")
+
+    target_quantile = 1.0 - mask_frac
+    threshold = torch.quantile(real_counts.float(), target_quantile).item()
+    threshold = max(threshold, 1.0)
+    print(f"  Count threshold: >= {threshold:.0f}")
+
+    mask = (all_counts >= threshold).int()
+    masked_real = (mask.bool() & all_attn_masks.bool()).sum().item()
+    total_real = all_attn_masks.sum().item()
+    actual_frac = masked_real / max(total_real, 1)
+    print(
+        f"SAE mask stats: {masked_real} masked / {total_real} real = "
+        f"{actual_frac:.4f} (target: {mask_frac})"
+    )
+
+    all_masks = mask.tolist()
+    masked_dataset = tokenized_dataset.add_column("keyword_mask", all_masks)
+    os.makedirs(os.path.dirname(cache_dir) or ".", exist_ok=True)
+    masked_dataset.save_to_disk(cache_dir)
+    Path(done_marker).touch()
+    print(f"Saved SAE masks to {cache_dir}")
+    return masked_dataset
+
+
 class UnlearningDataset(Dataset):
     def __init__(self, tokenized_bio_remove_dataset, interleaved_dataset):
         self.tokenized_bio_remove_dataset = tokenized_bio_remove_dataset
@@ -349,7 +501,19 @@ def get_unlearning_dataset(args, tokenizer, num_proc: int):
     blocklist_path = getattr(args, "blocklist_path", "")
     if blocklist_path:
         method = getattr(args, "keyword_mask_method", "regex")
-        if method == "activation":
+        if method == "sae":
+            sae_frac = getattr(args, "sae_mask_frac", 0.115)
+            sae_latents = getattr(args, "sae_latents_path", "")
+            latents_stem = Path(sae_latents).stem
+            sae_cache = f"runs/keyword_mask_cache_sae_{latents_stem}_{sae_frac:.3f}"
+            all_remove_datasets = add_sae_masks(
+                all_remove_datasets,
+                args.model_name,
+                sae_latents,
+                sae_cache,
+                sae_frac,
+            )
+        elif method == "activation":
             layer_idx = getattr(args, "activation_mask_layer", 16)
             threshold = getattr(args, "activation_mask_threshold", 0.2)
             regex_cache = "runs/keyword_mask_cache"
