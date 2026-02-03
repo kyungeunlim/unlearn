@@ -1,7 +1,8 @@
-"""Compute mean effective rank of parameter update delta for linear modules.
+"""Compute effective rank and stable rank of parameter update deltas.
 
 Compares an unlearned model checkpoint against the base model to measure the
-effective rank of weight deltas in all 2D linear layers.
+effective rank and stable rank of weight deltas in all 2D linear layers.
+Saves per-module results to a CSV file.
 
 Usage:
     python -m unlearn.scripts.compute_erank --model_path /path/to/unlearned/model
@@ -9,6 +10,7 @@ Usage:
         --base_model EleutherAI/deep-ignorance-unfiltered
 """
 
+import csv
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,13 +19,14 @@ from safetensors import safe_open
 from simple_parsing import ArgumentParser
 from transformers.utils import SAFE_WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_NAME
 
-from unlearn.utils.math import effective_rank
+from unlearn.utils.math import effective_rank, stable_rank
 
 
 @dataclass
 class ErankConfig:
     model_path: str = ""
     base_model: str = "EleutherAI/deep-ignorance-unfiltered"
+    output_csv: str = ""
 
 
 def resolve_safetensor_paths(model_id: str) -> list[str]:
@@ -102,7 +105,7 @@ def main():
 
     print(f"Found {len(valid_keys)} linear weight matrices\n")
 
-    eranks = []
+    rows = []
     for i, key in enumerate(valid_keys):
         with safe_open(unlearned_index[key], framework="pt", device="cpu") as f:
             w_unlearned = f.get_tensor(key).float()
@@ -116,23 +119,55 @@ def main():
             continue
 
         er = effective_rank(delta)
-        eranks.append(er)
+        sr = stable_rank(delta)
+        rows.append(
+            {
+                "module": key,
+                "shape": f"{delta.shape[0]}x{delta.shape[1]}",
+                "effective_rank": er,
+                "stable_rank": sr,
+            }
+        )
         print(
             f"  [{i+1}/{len(valid_keys)}] {key}: "
-            f"shape={tuple(delta.shape)}, erank={er:.2f}",
+            f"shape={tuple(delta.shape)}, erank={er:.2f}, srank={sr:.2f}",
             flush=True,
         )
 
         del w_unlearned, w_base, delta
 
+    # Summary
+    eranks = [r["effective_rank"] for r in rows]
+    sranks = [r["stable_rank"] for r in rows]
+
     print(f"\n{'='*60}")
-    print(f"Linear modules with non-zero delta: {len(eranks)} / {len(valid_keys)}")
-    if eranks:
+    print(f"Linear modules with non-zero delta: {len(rows)} / {len(valid_keys)}")
+    if rows:
         print(f"Mean effective rank: {sum(eranks)/len(eranks):.2f}")
         print(f"Min effective rank:  {min(eranks):.2f}")
         print(f"Max effective rank:  {max(eranks):.2f}")
+        print(f"Mean stable rank:    {sum(sranks)/len(sranks):.2f}")
+        print(f"Min stable rank:     {min(sranks):.2f}")
+        print(f"Max stable rank:     {max(sranks):.2f}")
     else:
         print("No weight changes detected.")
+
+    # Save CSV
+    if rows:
+        output_csv = cfg.output_csv
+        if not output_csv:
+            model_name = Path(cfg.model_path).name
+            output_csv = str(
+                Path(cfg.model_path).parent / f"{model_name}_rank_stats.csv"
+            )
+
+        with open(output_csv, "w", newline="") as f:
+            writer = csv.DictWriter(
+                f, fieldnames=["module", "shape", "effective_rank", "stable_rank"]
+            )
+            writer.writeheader()
+            writer.writerows(rows)
+        print(f"\nCSV saved to: {output_csv}")
 
 
 if __name__ == "__main__":
