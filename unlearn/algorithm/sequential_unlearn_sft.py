@@ -19,7 +19,8 @@ from transformers import (
 from transformers.trainer_utils import seed_worker
 
 import wandb
-from unlearn.utils.math import max_entropy_kl_loss
+from unlearn.utils.keyword_masks import apply_keyword_masks
+from unlearn.utils.math import max_entropy_kl_loss, top_k_entropy_loss
 from unlearn.utils.muon import MuonAdamW
 from unlearn.utils.unlearning_dataset import get_unlearning_dataset
 from unlearn.utils.worker_utils import get_model_and_tokenizer, save_checkpoint
@@ -164,12 +165,11 @@ class SequentialSftTrainer(Trainer):
 
         return F.cross_entropy(shift_logits.float(), shift_labels, reduction="mean")
 
-    def _compute_l2_retain_loss(self, model, inputs, target_layer, target_device):
-        """L2 distance between current and original hidden states at the target layer.
-
-        Only the target layer's output (hidden_states[target_layer + 1]) produces
-        meaningful gradients, since _freeze_and_log zeroes all other layers' grads.
-        """
+    def _compute_l2_retain_loss(self, model, inputs, target_layers, target_device):
+        """L2 distance between current and original hidden states,
+        averaged over layers."""
+        if isinstance(target_layers, int):
+            target_layers = [target_layers]
         retain_input_ids = inputs["input_ids"].to(target_device)
 
         with torch.no_grad():
@@ -184,9 +184,15 @@ class SequentialSftTrainer(Trainer):
         )
 
         # hidden_states[L+1] is the output of layer L
-        ref_h = ref_outputs.hidden_states[target_layer + 1].to(target_device)
-        cur_h = current_outputs.hidden_states[target_layer + 1]
-        return torch.norm(cur_h - ref_h, dim=-1, p=2, dtype=torch.float).mean()
+        total_loss = torch.tensor(0.0, device=target_device)
+        for layer in target_layers:
+            ref_h = ref_outputs.hidden_states[layer + 1].to(target_device)
+            cur_h = current_outputs.hidden_states[layer + 1]
+            total_loss = (
+                total_loss
+                + torch.norm(cur_h - ref_h, dim=-1, p=2, dtype=torch.float).mean()
+            )
+        return total_loss / len(target_layers)
 
     def _compute_forget_loss(self, model, inputs, target_layer, target_device):
         """Forget loss using the model's actual output logits.
@@ -247,6 +253,11 @@ class SequentialSftTrainer(Trainer):
 
             return loss
 
+        elif self.run_args.use_top_k_entropy:
+            k = self.run_args.top_k
+            log_k = torch.log(torch.tensor(float(k), device=target_device))
+            return top_k_entropy_loss(logits_masked, k=k) / log_k
+
         elif self.run_args.use_max_entropy_kl:
             vocab_size = logits.shape[-1]
             log_vocab = torch.log(torch.tensor(float(vocab_size), device=target_device))
@@ -264,23 +275,33 @@ class SequentialSftTrainer(Trainer):
             log_vocab = torch.log(torch.tensor(float(vocab_size), device=target_device))
             return ce_loss / log_vocab
 
-    def _freeze_and_log(self, model, current_step, target_layer, extra=""):
-        target_str = f".layers.{target_layer}."
+    def _freeze_and_log(
+        self, model, current_step, target_layer, keep_layers=None, extra=""
+    ):
+        if keep_layers is None:
+            keep_layers = {target_layer}
+        keep_strs = {f".layers.{l}." for l in keep_layers}
         grad_params = 0
         frozen_params = 0
         for name, param in model.named_parameters():
             if param.grad is None:
                 continue
-            if target_str in name:
+            if any(s in name for s in keep_strs):
                 grad_params += 1
             else:
                 param.grad = None
                 frozen_params += 1
 
         if current_step % 8 == 0 and int(os.environ.get("LOCAL_RANK", 0)) == 0:
+            maintain_str = (
+                f" | maintaining: {len(keep_layers) - 1}"
+                if len(keep_layers) > 1
+                else ""
+            )
             print(
                 f"  [grad freeze] step {current_step} | target layer {target_layer} | "
-                f"params with grad: {grad_params} | frozen: {frozen_params}" + extra
+                f"params with grad: {grad_params} | frozen: {frozen_params}"
+                f"{maintain_str}" + extra
             )
 
     def _compute_grad_norm(self, model, target_str):
@@ -298,6 +319,14 @@ class SequentialSftTrainer(Trainer):
 
         phase_idx, target_layer, retain_coeff, forget_coeff = self._get_phase_info()
         target_str = f".layers.{target_layer}."
+
+        # Determine layers to keep gradients for (target + already-unlearned)
+        if self.run_args.maintain_unlearned and phase_idx > 0:
+            already_unlearned = self.layers_to_unlearn[:phase_idx]
+            keep_layers = set(already_unlearned) | {target_layer}
+        else:
+            keep_layers = {target_layer}
+        keep_strs = {f".layers.{l}." for l in keep_layers}
 
         # L2-SP: register hook to capture penalty during retain forward.
         # During forward, FSDP gathers params so the hook sees original shapes.
@@ -329,7 +358,7 @@ class SequentialSftTrainer(Trainer):
             retain_loss = self._compute_nll_retain_loss(model, inputs, target_device)
         elif self.run_args.retain_loss_type == "l2":
             retain_loss = self._compute_l2_retain_loss(
-                model, inputs, target_layer, target_device
+                model, inputs, sorted(keep_layers), target_device
             )
         else:
             retain_loss = self._compute_retain_loss(model, inputs, target_device)
@@ -342,7 +371,7 @@ class SequentialSftTrainer(Trainer):
         retain_grad_norm = self._compute_grad_norm(model, target_str)
         retain_grads = {}
         for name, param in model.named_parameters():
-            if param.grad is not None and target_str in name:
+            if param.grad is not None and any(s in name for s in keep_strs):
                 retain_grads[name] = param.grad.clone()
         model.zero_grad()
 
@@ -361,7 +390,7 @@ class SequentialSftTrainer(Trainer):
             for name, param in model.named_parameters():
                 if (
                     param.grad is not None
-                    and target_str in name
+                    and any(s in name for s in keep_strs)
                     and name in retain_grads
                 ):
                     r = retain_grads[name].to(param.grad.dtype)
@@ -387,7 +416,7 @@ class SequentialSftTrainer(Trainer):
             for name, param in model.named_parameters():
                 if (
                     param.grad is not None
-                    and target_str in name
+                    and any(s in name for s in keep_strs)
                     and name in retain_grads
                 ):
                     param.grad.add_(retain_grads[name].to(param.grad.dtype))
@@ -396,7 +425,13 @@ class SequentialSftTrainer(Trainer):
         extra = (
             f" | same_sign: {same_sign_pct:.0f}%" if same_sign_pct is not None else ""
         )
-        self._freeze_and_log(model, self.current_training_step, target_layer, extra)
+        self._freeze_and_log(
+            model,
+            self.current_training_step,
+            target_layer,
+            keep_layers=keep_layers,
+            extra=extra,
+        )
 
         # Keyword mask stats
         keyword_mask_frac = None
@@ -469,6 +504,8 @@ class SequentialSftUnlearnConfig:
     warmup_ratio: float = 0.0
     use_ultrachat: bool = True
     use_max_entropy_kl: bool = False
+    use_top_k_entropy: bool = False
+    top_k: int = 100
     same_sign_grads: bool = False
     asymmetric_filter: bool = False
     ramp_retain_from_zero: bool = False
@@ -485,11 +522,16 @@ class SequentialSftUnlearnConfig:
     muon_momentum: float = 0.95
     wandb_project: str = ""
     blocklist_path: str = ""
-    keyword_mask_method: Literal["regex", "activation", "sae"] = "regex"
+    keyword_mask_method: Literal["regex", "activation", "sae", "probe"] = "regex"
     activation_mask_threshold: float = 0.2
     activation_mask_layer: int = 16
     sae_latents_path: str = ""
     sae_mask_frac: float = 0.115
+    probe_mask_path: str = ""
+    probe_mask_layer: int = 11
+    probe_mask_frac: float = 0.105
+    gradient_checkpointing: bool = False
+    maintain_unlearned: bool = False
 
 
 if __name__ == "__main__":
@@ -518,6 +560,9 @@ if __name__ == "__main__":
     model.enable_input_require_grads()
 
     train_dataset = get_unlearning_dataset(run_cfg, tokenizer, NUM_PROC)
+    train_dataset.tokenized_bio_remove_dataset = apply_keyword_masks(
+        train_dataset.tokenized_bio_remove_dataset, run_cfg, tokenizer
+    )
 
     frozen_model = AutoModelForCausalLM.from_pretrained(
         run_cfg.model_name,
@@ -575,7 +620,7 @@ if __name__ == "__main__":
         per_device_eval_batch_size=run_cfg.pdbs,
         num_train_epochs=total_epochs,
         weight_decay=0.01,
-        gradient_checkpointing=False,
+        gradient_checkpointing=run_cfg.gradient_checkpointing,
         bf16=True,
         max_grad_norm=run_cfg.max_grad_norm,
         save_strategy="no",

@@ -24,6 +24,12 @@ def main():
         default=0.4297,
         help="Original model WMDP Bio accuracy",
     )
+    parser.add_argument(
+        "--title",
+        type=str,
+        default=None,
+        help="Plot title (includes HP/algorithm info)",
+    )
     args = parser.parse_args()
 
     # Extract results from log
@@ -75,10 +81,13 @@ def main():
 
     plt.xlabel("Finetuning Steps", fontsize=12)
     plt.ylabel("WMDP Bio Accuracy (%)", fontsize=12)
-    plt.title(
-        f"Tampering Resistance: {args.model_name}\nFinetune Attack on Bio Data",
-        fontsize=14,
-    )
+    if args.title:
+        plt.title(args.title, fontsize=13)
+    else:
+        plt.title(
+            f"Tampering Resistance: {args.model_name}\nFinetune Attack on Bio Data",
+            fontsize=14,
+        )
     plt.legend(loc="lower right", fontsize=10)
     plt.grid(True, alpha=0.3)
     plt.ylim(0, 60)

@@ -239,6 +239,122 @@ def add_activation_masks(
     return masked_dataset
 
 
+def add_probe_masks(
+    tokenized_dataset,
+    model_name,
+    probe_path,
+    probe_layer,
+    mask_frac,
+    cache_dir,
+):
+    """Pre-compute per-token mask using a trained linear classification probe.
+
+    Loads a linear probe (from safetensors), extracts hidden states at the
+    probe's layer, computes per-token logits, and masks the top mask_frac
+    fraction of tokens (highest logit = most forget-relevant).
+
+    Only rank 0 computes; other ranks poll for the cache file.
+    """
+    from safetensors.torch import load_file
+
+    done_marker = cache_dir + ".done"
+    if os.path.exists(done_marker):
+        print(f"Loading cached probe masks from {cache_dir}")
+        return load_from_disk(cache_dir)
+
+    global_rank = int(os.environ.get("RANK", 0))
+    if global_rank != 0:
+        print(f"Rank {global_rank} waiting for probe masks from rank 0...")
+        while not os.path.exists(done_marker):
+            time.sleep(10)
+        time.sleep(5)
+        print(f"Rank {global_rank} loading probe masks from {cache_dir}")
+        return load_from_disk(cache_dir)
+
+    # --- Rank 0 only below ---
+    print(f"Loading linear probe from {probe_path}")
+    probe_state = load_file(probe_path)
+    weight = probe_state["linear.weight"]  # [1, model_dim]
+    bias = probe_state["linear.bias"]  # [1]
+
+    print(
+        f"Loading model {model_name} for probe activation "
+        f"extraction (layer {probe_layer})..."
+    )
+    probe_model = AutoModelForCausalLM.from_pretrained(
+        model_name, torch_dtype=torch.bfloat16, device_map={"": 0}
+    )
+    probe_model.eval()
+    weight_gpu = weight.squeeze(0).bfloat16().cuda()
+    bias_gpu = bias.bfloat16().cuda()
+
+    batch_size = 4
+    all_logits = []
+    all_attn_masks = []
+
+    for batch_start in range(0, len(tokenized_dataset), batch_size):
+        batch_end = min(batch_start + batch_size, len(tokenized_dataset))
+        input_ids = torch.stack(
+            [
+                torch.tensor(tokenized_dataset[i]["input_ids"])
+                for i in range(batch_start, batch_end)
+            ]
+        ).cuda()
+        attn = torch.stack(
+            [
+                torch.tensor(tokenized_dataset[i]["attention_mask"])
+                for i in range(batch_start, batch_end)
+            ]
+        )
+
+        with torch.no_grad():
+            outputs = probe_model(input_ids, output_hidden_states=True)
+        hidden = outputs.hidden_states[probe_layer + 1]  # [bs, seq, dim]
+        logits = (hidden @ weight_gpu + bias_gpu).squeeze(-1).float().cpu()
+
+        all_logits.append(logits)
+        all_attn_masks.append(attn)
+
+        if batch_start % (batch_size * 32) == 0:
+            print(f"  Probe mask progress: {batch_end}/{len(tokenized_dataset)}")
+
+    del probe_model, weight_gpu, bias_gpu
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+
+    all_logits = torch.cat(all_logits, dim=0)
+    all_attn_masks = torch.cat(all_attn_masks, dim=0)
+
+    real_logits = all_logits[all_attn_masks.bool()]
+    percentiles = [10, 25, 50, 75, 80, 90, 95, 99]
+    pct_values = torch.quantile(
+        real_logits, torch.tensor([p / 100 for p in percentiles])
+    )
+    pct_str = ", ".join(f"{p}th={v:.3f}" for p, v in zip(percentiles, pct_values))
+    print(f"Probe logit percentiles: {pct_str}")
+
+    target_quantile = 1.0 - mask_frac
+    threshold = torch.quantile(real_logits, target_quantile).item()
+    print(f"  Logit threshold for top {mask_frac*100:.1f}%: {threshold:.4f}")
+
+    mask = (all_logits >= threshold).int()
+    masked_real = (mask.bool() & all_attn_masks.bool()).sum().item()
+    total_real = all_attn_masks.sum().item()
+    actual_frac = masked_real / max(total_real, 1)
+    print(
+        f"Probe mask stats: {masked_real} masked / {total_real} real = "
+        f"{actual_frac:.4f} (target: {mask_frac})"
+    )
+
+    all_masks = mask.tolist()
+    masked_dataset = tokenized_dataset.add_column("keyword_mask", all_masks)
+    os.makedirs(os.path.dirname(cache_dir) or ".", exist_ok=True)
+    masked_dataset.save_to_disk(cache_dir)
+    Path(done_marker).touch()
+    print(f"Saved probe masks to {cache_dir}")
+    return masked_dataset
+
+
 def add_sae_masks(
     tokenized_dataset,
     model_name,
@@ -388,3 +504,56 @@ def add_sae_masks(
     Path(done_marker).touch()
     print(f"Saved SAE masks to {cache_dir}")
     return masked_dataset
+
+
+def apply_keyword_masks(all_remove_datasets, args, tokenizer):
+    blocklist_path = getattr(args, "blocklist_path", "")
+    if not blocklist_path:
+        return all_remove_datasets
+
+    method = getattr(args, "keyword_mask_method", "regex")
+    if method == "probe":
+        probe_path = getattr(args, "probe_mask_path", "")
+        probe_layer = getattr(args, "probe_mask_layer", 11)
+        probe_frac = getattr(args, "probe_mask_frac", 0.105)
+        probe_cache = f"runs/keyword_mask_cache_probe_l{probe_layer}_f{probe_frac:.3f}"
+        return add_probe_masks(
+            all_remove_datasets,
+            args.model_name,
+            probe_path,
+            probe_layer,
+            probe_frac,
+            probe_cache,
+        )
+    elif method == "sae":
+        sae_frac = getattr(args, "sae_mask_frac", 0.115)
+        sae_latents = getattr(args, "sae_latents_path", "")
+        latents_stem = Path(sae_latents).stem
+        sae_cache = f"runs/keyword_mask_cache_sae_{latents_stem}_{sae_frac:.3f}"
+        return add_sae_masks(
+            all_remove_datasets,
+            args.model_name,
+            sae_latents,
+            sae_cache,
+            sae_frac,
+        )
+    elif method == "activation":
+        layer_idx = getattr(args, "activation_mask_layer", 16)
+        threshold = getattr(args, "activation_mask_threshold", 0.2)
+        regex_cache = "runs/keyword_mask_cache"
+        act_cache = f"runs/keyword_mask_cache_activation_l{layer_idx}_t{threshold:.2f}"
+        return add_activation_masks(
+            all_remove_datasets,
+            tokenizer,
+            blocklist_path,
+            args.model_name,
+            regex_cache,
+            act_cache,
+            threshold,
+            layer_idx,
+        )
+    else:
+        cache_dir = "runs/keyword_mask_cache"
+        return add_keyword_masks(
+            all_remove_datasets, tokenizer, blocklist_path, cache_dir
+        )

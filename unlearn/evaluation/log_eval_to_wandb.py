@@ -53,6 +53,10 @@ def main():
             if key in group_results:
                 metrics[group_name.replace("-", "_") + "_acc"] = group_results[key]
                 break
+        if "correct_prob,none" in group_results:
+            metrics[group_name.replace("-", "_") + "_correct_prob"] = group_results[
+                "correct_prob,none"
+            ]
 
     eval_metrics = {f"eval/{k}": v for k, v in metrics.items()}
     eval_metrics["eval_step"] = args.step

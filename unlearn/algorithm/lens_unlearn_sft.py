@@ -20,6 +20,7 @@ from transformers.trainer_utils import seed_worker
 from tuned_lens import TunedLens
 
 from unlearn.utils.hook import ActivationCapture
+from unlearn.utils.keyword_masks import apply_keyword_masks
 from unlearn.utils.unlearning_dataset import get_unlearning_dataset
 from unlearn.utils.worker_utils import get_model_and_tokenizer, save_checkpoint
 
@@ -340,6 +341,9 @@ if __name__ == "__main__":
 
     # Load dataset
     train_dataset = get_unlearning_dataset(run_cfg, tokenizer, NUM_PROC)
+    train_dataset.tokenized_bio_remove_dataset = apply_keyword_masks(
+        train_dataset.tokenized_bio_remove_dataset, run_cfg, tokenizer
+    )
 
     # Load frozen tuned lens
     print(f"Loading tuned lens from: {run_cfg.lens_path}")

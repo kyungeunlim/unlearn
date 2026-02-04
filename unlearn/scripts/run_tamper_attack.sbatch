@@ -9,6 +9,7 @@
 
 MODEL_NAME="${1:-models/EleutherAI/deep-ignorance-unfiltered_lens_ex8192_rm5.0_ret5.0}"
 EVAL_EVERY="${2:-10}"
+OUTPUT_DIR="${3:-runs/tamper_attack}"
 
 source ~/miniforge3/bin/activate snake 2>/dev/null || source miniforge3/bin/activate snake 2>/dev/null || conda activate snake 2>/dev/null || true
 
@@ -37,10 +38,11 @@ fi
 echo "===== Running Tamper Attack ====="
 echo "Model: $MODEL_NAME"
 echo "Eval every: $EVAL_EVERY steps"
+echo "Output dir: $OUTPUT_DIR"
 
 CMD="python -m unlearn.scripts.run_tamper_attack_with_plot \
     --model_name $MODEL_NAME \
-    --output_dir runs/tamper_attack \
+    --output_dir $OUTPUT_DIR \
     --num_train_examples 512 \
     --epochs 1 \
     --eval_every $EVAL_EVERY \

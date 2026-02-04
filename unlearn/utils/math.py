@@ -61,3 +61,21 @@ def max_entropy_kl_loss(logits):
     loss = log_sum_exp - logit_mean
 
     return loss.mean()
+
+
+def top_k_entropy_loss(logits, k=100):
+    """
+    Maximize entropy over only the top-K most likely tokens at each position.
+
+    Extracts the K highest logits and pushes them toward uniform
+    via KL(Uniform || Model).
+
+    Args:
+        logits: Tensor of shape [N, V] (already masked to valid positions)
+        k: Number of top tokens to target
+
+    Returns:
+        Scalar loss (unnormalized; caller should divide by log(k))
+    """
+    topk_logits, _ = torch.topk(logits, k, dim=-1)  # [N, K]
+    return max_entropy_kl_loss(topk_logits)

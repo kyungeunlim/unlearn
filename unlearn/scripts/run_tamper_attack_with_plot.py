@@ -184,7 +184,13 @@ def prepare_dataset(config: TamperAttackConfig, tokenizer):
     return hf_dataset.from_list(chunked_examples).shuffle(seed=42)
 
 
-def plot_results(results_path: Path, output_path: Optional[Path] = None):
+def plot_results(
+    results_path: Path,
+    output_path: Optional[Path] = None,
+    title: Optional[str] = None,
+    baseline: float = 0.4297,
+    mean_stable_rank: Optional[float] = None,
+):
     with open(results_path) as f:
         results = json.load(f)
 
@@ -192,14 +198,39 @@ def plot_results(results_path: Path, output_path: Optional[Path] = None):
     accs = [r["wmdp_bio_acc"] * 100 for r in results]
 
     plt.figure(figsize=(10, 6))
-    plt.plot(steps, accs, "b-o", linewidth=2, markersize=6)
-    plt.axhline(y=25, color="r", linestyle="--", label="Random chance (25%)")
+    plt.plot(steps, accs, "b-o", linewidth=2, markersize=6, label="WMDP Bio Accuracy")
+    plt.axhline(
+        y=baseline * 100,
+        color="r",
+        linestyle="--",
+        linewidth=2,
+        label=f"Original Model: {baseline*100:.1f}%",
+    )
+    plt.axhline(y=25, color="g", linestyle=":", linewidth=2, label="Random Chance: 25%")
     plt.xlabel("Training Step", fontsize=12)
     plt.ylabel("WMDP Bio Accuracy (%)", fontsize=12)
-    plt.title("Tamper Attack: WMDP Bio Recovery Over Training", fontsize=14)
-    plt.legend()
+    if title is None:
+        title = "Tamper Attack: WMDP Bio Recovery Over Training"
+    if mean_stable_rank is not None:
+        title += f"\nmean stable rank = {mean_stable_rank:.2f}"
+    plt.title(title, fontsize=13)
+    plt.legend(loc="lower right", fontsize=10)
     plt.grid(True, alpha=0.3)
-    plt.ylim(0, 100)
+    plt.ylim(0, 60)
+
+    if len(accs) > 1:
+        recovery = accs[-1] - accs[0]
+        textstr = f"Recovery: +{recovery:.1f}% in {steps[-1]} steps"
+        props = dict(boxstyle="round", facecolor="wheat", alpha=0.5)
+        plt.text(
+            0.02,
+            0.98,
+            textstr,
+            transform=plt.gca().transAxes,
+            fontsize=11,
+            verticalalignment="top",
+            bbox=props,
+        )
 
     if output_path is None:
         output_path = results_path.with_suffix(".png")
@@ -323,6 +354,12 @@ def parse_args():
         default=None,
         help="Path to existing results JSON to plot (skip training)",
     )
+    parser.add_argument(
+        "--title",
+        type=str,
+        default=None,
+        help="Plot title (includes HP/algorithm info)",
+    )
     return parser.parse_args()
 
 
@@ -330,7 +367,7 @@ if __name__ == "__main__":
     args = parse_args()
 
     if args.plot_only:
-        plot_results(Path(args.plot_only))
+        plot_results(Path(args.plot_only), title=args.title)
     else:
         assert torch.cuda.is_available(), "CUDA is not available"
 

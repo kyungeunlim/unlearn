@@ -18,6 +18,7 @@ from peft import LoraConfig, get_peft_model
 from simple_parsing import ArgumentParser
 from transformers import PreTrainedModel, Trainer, TrainingArguments
 
+from unlearn.utils.keyword_masks import apply_keyword_masks
 from unlearn.utils.unlearning_dataset import get_unlearning_dataset
 from unlearn.utils.worker_utils import get_model_and_tokenizer, save_checkpoint
 
@@ -150,6 +151,9 @@ if __name__ == "__main__":
     )
 
     train_dataset = get_unlearning_dataset(run_cfg, tokenizer, NUM_PROC)
+    train_dataset.tokenized_bio_remove_dataset = apply_keyword_masks(
+        train_dataset.tokenized_bio_remove_dataset, run_cfg, tokenizer
+    )
 
     if run_cfg.lora:
         # Determine max layer for layers_to_transform

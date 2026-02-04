@@ -171,3 +171,16 @@ Affine transforms for global_step54832 available at `EleutherAI/affine-checkpoin
 2. **1 epoch is sufficient** - longer training does not improve unlearning
 
 All models saved to `models/EleutherAI/deep-ignorance-unfiltered_kl_ret{X}_rm{Y}[_ep4]`.
+
+## LoRA (adapter saved separately, not merged)
+
+**Base config** from retain coef sweep sweet spot (retain=5, remove=5, 512 steps).
+
+**LoRA settings:**
+- `lora_r`: 16
+- `lora_alpha`: 16
+- `lora_dropout`: 0.05
+
+| Job ID | retain_coef | remove_coef | lora_r | Steps | retain_kl_loss | cb_loss | WMDP Robust | MMLU |
+|--------|-------------|-------------|--------|-------|----------------|---------|-------------|------|
+| Baseline | - | - | - | - | - | - | 42.97% | 45.10% |

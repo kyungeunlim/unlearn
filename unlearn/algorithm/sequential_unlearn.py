@@ -24,7 +24,8 @@ from transformers.modeling_utils import unwrap_model
 from transformers.trainer_utils import seed_worker
 
 from unlearn.utils.hook import ActivationCapture, resolve_layer_names
-from unlearn.utils.math import max_entropy_kl_loss
+from unlearn.utils.keyword_masks import apply_keyword_masks
+from unlearn.utils.math import max_entropy_kl_loss, top_k_entropy_loss
 from unlearn.utils.unlearning_dataset import get_unlearning_dataset
 from unlearn.utils.worker_utils import get_model_and_tokenizer, save_checkpoint
 
@@ -308,7 +309,11 @@ class SequentialUnlearningTrainer(Trainer):
             logits_masked = logits[mask]
 
             if logits_masked.numel() > 0:
-                if self.run_args.use_max_entropy_kl:
+                if self.run_args.use_top_k_entropy:
+                    k = self.run_args.top_k
+                    log_k = torch.log(torch.tensor(float(k), device=device))
+                    forget_loss = top_k_entropy_loss(logits_masked, k=k) / log_k
+                elif self.run_args.use_max_entropy_kl:
                     forget_loss = max_entropy_kl_loss(logits_masked) / log_vocab
                 else:
                     batch_size, seq_len = logits.shape[:2]
@@ -365,6 +370,8 @@ class SequentialUnlearnConfig:
     revision: str = "main"
     epochs_per_layer: int = 1
     use_max_entropy_kl: bool = False
+    use_top_k_entropy: bool = False
+    top_k: int = 100
     use_ultrachat: bool = True
 
 
@@ -423,6 +430,9 @@ def main():
 
     # Load dataset
     train_dataset = get_unlearning_dataset(run_cfg, tokenizer, NUM_PROC)
+    train_dataset.tokenized_bio_remove_dataset = apply_keyword_masks(
+        train_dataset.tokenized_bio_remove_dataset, run_cfg, tokenizer
+    )
 
     world_size = int(os.environ.get("WORLD_SIZE", 1))
     global_batch_size = 32

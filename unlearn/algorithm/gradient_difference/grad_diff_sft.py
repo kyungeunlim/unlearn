@@ -25,6 +25,7 @@ from transformers import (
 )
 from transformers.trainer_utils import seed_worker
 
+from unlearn.utils.keyword_masks import apply_keyword_masks
 from unlearn.utils.unlearning_dataset import get_unlearning_dataset
 
 
@@ -252,6 +253,9 @@ if __name__ == "__main__":
     model.enable_input_require_grads()
 
     train_dataset = get_unlearning_dataset(run_cfg, tokenizer, NUM_PROC)
+    train_dataset.tokenized_bio_remove_dataset = apply_keyword_masks(
+        train_dataset.tokenized_bio_remove_dataset, run_cfg, tokenizer
+    )
 
     # Frozen reference model for KL retain loss
     frozen_ref_model = AutoModelForCausalLM.from_pretrained(

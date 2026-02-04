@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from datasets import Dataset, concatenate_datasets, load_dataset
 
 from unlearn.reference.cas.utils import (
@@ -13,20 +11,16 @@ from unlearn.reference.cas.utils import (
     ultrachat_tokenize_function,
     wikitext_tokenize_function,
 )
-from unlearn.utils.keyword_masks import (
-    add_activation_masks,
-    add_keyword_masks,
-    add_sae_masks,
-)
 
 
 class UnlearningDataset(Dataset):
     def __init__(self, tokenized_bio_remove_dataset, interleaved_dataset):
         self.tokenized_bio_remove_dataset = tokenized_bio_remove_dataset
         self.interleaved_dataset = interleaved_dataset
-        self.has_keyword_mask = (
-            "keyword_mask" in tokenized_bio_remove_dataset.column_names
-        )
+
+    @property
+    def has_keyword_mask(self):
+        return "keyword_mask" in self.tokenized_bio_remove_dataset.column_names
 
     def __len__(self):
         return len(self.interleaved_dataset["input_ids"])
@@ -115,43 +109,5 @@ def get_unlearning_dataset(args, tokenizer, num_proc: int):
 
     all_retain_datasets = concatenate_datasets(retain_datasets)
     all_remove_datasets = concatenate_datasets(remove_datasets)
-
-    blocklist_path = getattr(args, "blocklist_path", "")
-    if blocklist_path:
-        method = getattr(args, "keyword_mask_method", "regex")
-        if method == "sae":
-            sae_frac = getattr(args, "sae_mask_frac", 0.115)
-            sae_latents = getattr(args, "sae_latents_path", "")
-            latents_stem = Path(sae_latents).stem
-            sae_cache = f"runs/keyword_mask_cache_sae_{latents_stem}_{sae_frac:.3f}"
-            all_remove_datasets = add_sae_masks(
-                all_remove_datasets,
-                args.model_name,
-                sae_latents,
-                sae_cache,
-                sae_frac,
-            )
-        elif method == "activation":
-            layer_idx = getattr(args, "activation_mask_layer", 16)
-            threshold = getattr(args, "activation_mask_threshold", 0.2)
-            regex_cache = "runs/keyword_mask_cache"
-            act_cache = (
-                f"runs/keyword_mask_cache_activation_l{layer_idx}_t{threshold:.2f}"
-            )
-            all_remove_datasets = add_activation_masks(
-                all_remove_datasets,
-                tokenizer,
-                blocklist_path,
-                args.model_name,
-                regex_cache,
-                act_cache,
-                threshold,
-                layer_idx,
-            )
-        else:
-            cache_dir = "runs/keyword_mask_cache"
-            all_remove_datasets = add_keyword_masks(
-                all_remove_datasets, tokenizer, blocklist_path, cache_dir
-            )
 
     return UnlearningDataset(all_remove_datasets, all_retain_datasets)
