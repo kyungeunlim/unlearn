@@ -1,0 +1,8 @@
+group: wmdp_bio_cloze_correct_prob_group
+task:
+  - wmdp_bio_cloze_correct_prob
+aggregate_metric_list:
+  - metric: correct_prob
+    aggregation: mean
+metadata:
+  version: 1

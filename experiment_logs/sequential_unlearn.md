@@ -115,6 +115,7 @@ Same setup as above but using MuonAdamW optimizer (Muon for 2D hidden matrices, 
 | 16d | 31→0 (step 1) | 5 | 2 | 0.02 | 1024 | | ~1.03 | 0.3341 | 0.4166 | | | | Job 2133391, +regex keyword_mask, all layers, 32 steps/layer, +maintain_unlearned |
 | 17 | 31→11 (step 4) | 5 | 2 | 0.02 | 768 | ~5.3 | ~1.03 | 0.3525 | 0.4420 | | | | Job 2127358, +probe_mask (layer 11 linear, 10.5% tokens) |
 | 18 | 31→11 (step 4) | 5 | 2 | 0.02 | 768 | ~5.9 | ~1.03 | 0.3848 | 0.4499 | 0.1631 | 2999 | 18.81 | Job 2133026, +regex keyword_mask, +l2sp_coef=0.01 |
+
 ### Top-K Entropy Forget Loss (K=100), L2 Retain Loss (LoRA)
 
 Maximizes entropy over only the top-100 most likely tokens at each position (normalized by log(K) instead of log(V)).
@@ -126,8 +127,11 @@ Maximizes entropy over only the top-100 most likely tokens at each position (nor
 | - | - | - | - | - | - | - | 0.4297 | 0.4510 | Baseline |
 | 1 | 28→16 (step 4) | 50 | 5 | 128 | ~2.74 | ~1.00 | **0.2857** | **0.4499** | Job 2133393 |
 | 2 | 31→0 (step 1) | 50 | 5 | 1024 | | ~1.00 | 0.2431 | 0.2459 | Job 2133442, all layers, 32 steps/layer, MMLU collapsed |
-| 3 | 31→0 (step 1) | 50 | 5 | 1024 | ~9.5 | ~1.75 | 0.3687 | 0.4423 | Job 2133540, all layers, 32 steps/layer, +freeze_non_target |
-| 4 | 31→0 (step 1) | 200 | 5 | 1024 | | | | | All layers, 32 steps/layer, +freeze_non_target |
+| 5 | 31→0 (step 1) | 5 | 5 | 1024 | ~2.96 | ~1.07 | 0.2546 | 0.2450 | Job 2140894, all layers, 32 steps/layer, MMLU collapsed |
+| 6 | 31→0 (step 1) | 10 | 5 | 1024 | ~3.17 | ~1.26 | 0.2350 | 0.2465 | Job 2140895, all layers, 32 steps/layer, MMLU collapsed |
+| 7 | 31→0 (step 1) | 20 | 5 | 1024 | ~3.21 | ~1.18 | 0.2465 | 0.3863 | Job 2140896, all layers, 32 steps/layer |
+| 8 | 31→0 (step 1) | 12 | 5 | 1024 | | | | | Job 2208067, all layers, 32 steps/layer |
+| 9 | 31→0 (step 1) | 15 | 5 | 1024 | | | | | Job 2208068, all layers, 32 steps/layer |
 
 ### Top-K Entropy Forget Loss, L2 Retain Loss (SFT + Muon + Keyword Mask)
 
@@ -140,7 +144,7 @@ Maximizes entropy over only the top-100 most likely tokens at each position (nor
 | 2 | 10 | 31→11 (step 4) | 5 | 2 | 0.02 | 768 | 32 | ~5.88 | ~1.01 | **0.3122** | **0.4435** | Job 2133435 |
 | 3 | 50 | 31→11 (step 4) | 5 | 2 | 0.02 | 768 | 32 | 4.77 | 1.01 | 0.3433 | 0.4379 | Job 2133436 |
 | 4 | 200 | 31→11 (step 4) | 5 | 2 | 0.02 | 768 | 32 | 4.78 | 1.01 | 0.3353 | 0.4390 | Job 2133437 |
-| 5 | 100 | 31→11 (step 4) | 5 | 2 | 0.02 | 3072 | 32 | | | | | Job 2133563, 4096 examples |
+| 5 | 100 | 31→11 (step 4) | 5 | 2 | 2e-4 | 3072 | 32 | | | | | Job 2209376, epochs_per_layer=4 |
 
 ### Max Entropy KL Forget Loss, KL Retain Loss (Naive SFT, breaks differential unlearning)
 

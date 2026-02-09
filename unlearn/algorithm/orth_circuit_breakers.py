@@ -2,6 +2,7 @@
 # Uses Cas's circuit breakers implementation with DDP enabled.
 
 import os
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from typing import Literal, cast
 
@@ -15,6 +16,7 @@ from transformers.trainer_utils import seed_worker
 
 from unlearn.utils.hook import ActivationCapture, resolve_layer_names
 from unlearn.utils.keyword_masks import apply_keyword_masks
+from unlearn.utils.muon import MuonAdamW
 from unlearn.utils.unlearning_dataset import get_unlearning_dataset
 from unlearn.utils.worker_utils import get_model_and_tokenizer, save_checkpoint
 
@@ -28,6 +30,8 @@ class UnlearningTrainer(Trainer):
         train_dataset,
         tokenizer,
         lora_target_layers,
+        use_lora: bool = True,
+        use_muon: bool = False,
         **kwargs,
     ):
         super().__init__(
@@ -46,9 +50,21 @@ class UnlearningTrainer(Trainer):
         self.remove_coef = self.run_args.remove_coef
         self.orth_coef = self.run_args.orth_coef
         self.trainer_tokenizer = tokenizer
+        self.use_lora = use_lora
+        self.use_muon = use_muon
 
         self.layer_id_to_name = resolve_layer_names(model, lora_target_layers)
         self.target_module_names = list(self.layer_id_to_name.values())
+
+    def create_optimizer(self):
+        if self.use_muon:
+            self.optimizer = MuonAdamW(
+                self.model.parameters(),
+                lr=self.args.learning_rate,
+                weight_decay=self.args.weight_decay,
+            )
+            return self.optimizer
+        return super().create_optimizer()
 
     def get_train_dataloader(self) -> DataLoader:
         if self.train_dataset is None:
@@ -125,7 +141,7 @@ class RRTrainer(UnlearningTrainer):
         )
         retain_coeff = self.retain_coef * scheduled_coeff
         circuit_breaker_coeff = self.remove_coef * (1 - 0.25 * scheduled_coeff)
-        orth_coeff = self.orth_coef * (1 - 0.25 * scheduled_coeff)
+        orth_coeff = self.orth_coef * scheduled_coeff
 
         retain_mask = retain_attention_mask.unsqueeze(-1)
 
@@ -134,7 +150,10 @@ class RRTrainer(UnlearningTrainer):
         capturer = ActivationCapture(unwrapped_model, self.target_module_names)
 
         # --- Forward Pass 1: Reference (No Adapter) ---
-        with unwrapped_model.disable_adapter():  # type: ignore
+        adapter_ctx = (
+            unwrapped_model.disable_adapter() if self.use_lora else nullcontext()
+        )  # type: ignore
+        with adapter_ctx:
             unwrapped_model.eval()
             capturer.register()  # Attach hooks
 
@@ -237,7 +256,8 @@ class RRTrainer(UnlearningTrainer):
 
             if self.orth_coef > 0:
                 num_pairs = batch_size * (batch_size - 1) * len(self.lora_target_layers)
-                orth_loss = orth_loss_total / (num_pairs + 1e-6)
+                mean_seq_len = cb_mask_sum.mean()
+                orth_loss = orth_loss_total / (num_pairs + 1e-6) * mean_seq_len
             else:
                 orth_loss = torch.tensor(0.0, device=target_device)
         else:
@@ -298,6 +318,10 @@ class OrthCircuitBreakerConfig:
     probe_mask_frac: float = 0.105
     revision: str = "main"
     hidden_dim: int = 4096
+    lora_target: Literal["attn", "mlp", "all"] = "attn"
+    lora_all_layers: bool = False
+    exclude_lora_layers: list[int] = field(default_factory=list)
+    optimizer: Literal["adamw", "muon"] = "adamw"
 
 
 if __name__ == "__main__":
@@ -323,29 +347,50 @@ if __name__ == "__main__":
         train_dataset.tokenized_bio_remove_dataset, run_cfg, tokenizer
     )
 
-    lora_layers_to_transform = [i for i in range(max(run_cfg.layers) + 1)]
+    if run_cfg.lora_all_layers:
+        num_layers = model.config.num_hidden_layers
+        lora_layers_to_transform = list(range(num_layers))
+    else:
+        lora_layers_to_transform = [i for i in range(max(run_cfg.layers) + 1)]
+
+    if run_cfg.exclude_lora_layers:
+        lora_layers_to_transform = [
+            l for l in lora_layers_to_transform if l not in run_cfg.exclude_lora_layers
+        ]
+        print(f"Excluding LoRA layers: {run_cfg.exclude_lora_layers}")
+
+    # Target modules based on model type and lora_target setting
+    if "OLMo" in run_cfg.model_name:
+        attn_modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
+        mlp_modules = ["gate_proj", "up_proj", "down_proj"]
+    else:
+        # GPT-NeoX style
+        attn_modules = ["query_key_value", "dense"]
+        mlp_modules = ["dense_h_to_4h", "dense_4h_to_h"]
+
+    if run_cfg.lora_target == "attn":
+        target_modules = attn_modules
+    elif run_cfg.lora_target == "mlp":
+        target_modules = mlp_modules
+    else:  # "all"
+        target_modules = attn_modules + mlp_modules
 
     if run_cfg.lora:
+        # Use rank-stabilized LoRA scaling (alpha=r)
+        # so effective LR doesn't depend on rank
         lora_config = LoraConfig(
             r=run_cfg.lora_r,
-            lora_alpha=16,
-            target_modules=(
-                [
-                    "q_proj",
-                    "k_proj",
-                    "v_proj",
-                    "o_proj",
-                    "gate_proj",
-                    "up_proj",
-                    "down_proj",
-                ]
-                if "OLMo" in run_cfg.model_name
-                else None
-            ),
+            lora_alpha=run_cfg.lora_r,
+            target_modules=target_modules,
             lora_dropout=0.05,
             bias="none",
             layers_to_transform=lora_layers_to_transform,
             task_type="CAUSAL_LM",
+        )
+        print(
+            f"LoRA config: r={run_cfg.lora_r}, alpha={run_cfg.lora_r}, "
+            f"target={run_cfg.lora_target}, "
+            f"modules={target_modules}, layers={len(lora_layers_to_transform)}"
         )
 
         model = get_peft_model(model, lora_config)
@@ -362,6 +407,7 @@ if __name__ == "__main__":
     )
 
     output_dir = run_cfg.save_path or "./results"
+    use_muon = run_cfg.optimizer == "muon"
     training_args = TrainingArguments(
         output_dir=output_dir,
         learning_rate=run_cfg.lr,
@@ -371,13 +417,21 @@ if __name__ == "__main__":
         num_train_epochs=1,
         weight_decay=0.01,
         gradient_checkpointing=True,
-        fp16=True,
+        fp16=not use_muon,
+        bf16=use_muon,
         save_strategy="no",
         ddp_find_unused_parameters=False,
     )
 
     trainer = RRTrainer(
-        run_cfg, model, training_args, train_dataset, tokenizer, run_cfg.layers
+        run_cfg,
+        model,
+        training_args,
+        train_dataset,
+        tokenizer,
+        run_cfg.layers,
+        use_lora=run_cfg.lora,
+        use_muon=use_muon,
     )
 
     model.train()

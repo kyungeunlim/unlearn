@@ -314,7 +314,10 @@ class SequentialSftTrainer(Trainer):
         total_norm_sq = torch.tensor(0.0, device="cuda")
         for name, param in model.named_parameters():
             if param.grad is not None and target_str in name:
-                total_norm_sq += param.grad.detach().float().pow(2).sum()
+                g = param.grad.detach()
+                if hasattr(g, "to_local"):
+                    g = g.to_local()
+                total_norm_sq += g.float().pow(2).sum()
         return total_norm_sq.sqrt().item()
 
     def training_step(self, model, inputs, num_items_in_batch=None):
@@ -637,7 +640,6 @@ if __name__ == "__main__":
         report_to="none",
         fsdp="full_shard auto_wrap",
         fsdp_config={
-            "fsdp_version": 2,
             "auto_wrap_policy": "TRANSFORMER_BASED_WRAP",
             "activation_checkpointing": run_cfg.gradient_checkpointing,
             "state_dict_type": "FULL_STATE_DICT",

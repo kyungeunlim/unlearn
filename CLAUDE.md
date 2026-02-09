@@ -78,3 +78,21 @@ If you use need to use a venv, create and/or activate it with `python3 -m venv .
 ## Slurm cluster
 
 When installing on a slurm cluster do it on a node with `srun pip install -e .` to prevent CPU-only versions of packages from being installed.
+
+## Tamper Attacks
+
+Two modes for tamper attacks with `run_tamper_attack_with_plot.py`:
+
+**Short tamper (for normal unlearning runs):**
+- Use `--epochs=1 --eval_every=10` (~100 steps, eval every 10)
+- Purpose: Quickly demonstrate that standard unlearning is not tamper resistant
+- These runs recover to baseline quickly, so long runs waste compute
+
+**Long tamper (for tamper-resistant techniques):**
+- Use `--epochs=30 --eval_every=100` (~3000 steps, eval every 100)
+- Use `--eval_mmlu` to collect both WMDP and MMLU metrics
+- Purpose: Compare aggressive unlearning (catastrophic forgetting) against random init or filtered model baselines
+- These runs stay near random chance, so need longer runs to confirm resistance holds
+- Catastrophic forgetting runs typically use `retain_coef=0` (no capability preservation)
+
+Standard learning rate for both: `--lr=2e-5`

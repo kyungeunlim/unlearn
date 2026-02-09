@@ -373,7 +373,6 @@ class SequentialUnlearnConfig:
     use_top_k_entropy: bool = False
     top_k: int = 100
     use_ultrachat: bool = True
-    freeze_non_target: bool = False
 
 
 def main():
@@ -450,18 +449,6 @@ def main():
         print(f"Unlearning Layer {layer_idx}")
         print("=" * 60)
 
-        if run_cfg.freeze_non_target:
-            target_str = f".layers.{layer_idx}."
-            n_trainable, n_frozen = 0, 0
-            for name, param in model.named_parameters():
-                if "lora_" in name:
-                    param.requires_grad = target_str in name
-                    if param.requires_grad:
-                        n_trainable += 1
-                    else:
-                        n_frozen += 1
-            print(f"  [freeze] LoRA params: {n_trainable} trainable, {n_frozen} frozen")
-
         training_args = TrainingArguments(
             output_dir=f"./results/layer_{layer_idx}",
             learning_rate=run_cfg.lr,
@@ -474,7 +461,7 @@ def main():
             bf16=True,
             max_grad_norm=1.0,
             save_strategy="no",
-            ddp_find_unused_parameters=run_cfg.freeze_non_target,
+            ddp_find_unused_parameters=False,
         )
 
         trainer = SequentialUnlearningTrainer(
@@ -492,12 +479,6 @@ def main():
         trainer.train()
 
         print(f"Completed layer {layer_idx}")
-
-    # Re-enable all LoRA params before merging
-    if run_cfg.freeze_non_target:
-        for name, param in model.named_parameters():
-            if "lora_" in name:
-                param.requires_grad = True
 
     # Merge LoRA and save
     print("\nMerging LoRA weights...")

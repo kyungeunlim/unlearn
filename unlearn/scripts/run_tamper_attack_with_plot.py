@@ -8,11 +8,13 @@ import argparse
 import gc
 import json
 import os
+import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import matplotlib.pyplot as plt
 import torch
@@ -26,6 +28,8 @@ from transformers import (
     TrainingArguments,
 )
 
+from unlearn.utils.muon import MuonAdamW
+
 sys.path.append("./lm-evaluation-harness")
 
 from lm_eval import evaluator
@@ -35,6 +39,85 @@ from lm_eval.tasks import TaskManager
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 
 MAX_LENGTH = 2048
+REPO_ROOT = Path("/home/a6a/lucia.a6a/unlearn")
+
+
+def run_lmeval_subprocess(model_path: str, tasks: list[str], num_gpus: int = 4) -> dict:
+    """Run lm_eval via subprocess with multiple GPUs using model parallelism.
+
+    The main training process should run with CUDA_VISIBLE_DEVICES=0 so the model
+    stays on 1 GPU. This function overrides the env to expose all GPUs and uses
+    parallelize=True so lm_eval shards the model across them in a single process.
+    """
+    tasks_str = ",".join(tasks)
+    include_path = str(REPO_ROOT / "unlearn" / "lm_eval_tasks")
+    output_dir = Path("/tmp/lm_eval_results")
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "lm_eval",
+        "--model",
+        "hf",
+        "--model_args",
+        f"pretrained={model_path},parallelize=True",
+        "--tasks",
+        tasks_str,
+        "--batch_size",
+        "auto",
+        "--verbosity",
+        "ERROR",
+        "--output_path",
+        str(output_dir),
+    ]
+
+    if "wmdp" in tasks_str:
+        cmd.extend(["--include_path", include_path])
+
+    if "mmlu" in tasks_str:
+        cmd.extend(["--num_fewshot", "5"])
+
+    # Override CUDA_VISIBLE_DEVICES so the subprocess sees all GPUs
+    env = os.environ.copy()
+    env["CUDA_VISIBLE_DEVICES"] = ",".join(str(i) for i in range(num_gpus))
+
+    print(f"Running: {' '.join(cmd)}", flush=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+
+    if result.returncode != 0:
+        print(f"lm_eval stdout: {result.stdout[-2000:]}", flush=True)
+        print(f"lm_eval stderr: {result.stderr[-2000:]}", flush=True)
+        raise RuntimeError(f"lm_eval subprocess failed with code {result.returncode}")
+
+    # Parse results from JSON output files (more reliable than parsing tables)
+    results = {}
+    if output_dir.exists():
+        for json_file in sorted(output_dir.rglob("results.json"), reverse=True):
+            with open(json_file) as f:
+                data = json.load(f)
+            if "results" in data:
+                if "wmdp_bio_robust" in data["results"]:
+                    results["wmdp_bio_robust"] = data["results"]["wmdp_bio_robust"][
+                        "acc,none"
+                    ]
+                if "mmlu" in data["results"]:
+                    results["mmlu"] = data["results"]["mmlu"]["acc,none"]
+            break
+
+    # Fallback: parse table output
+    if not results:
+        output = result.stdout + result.stderr
+        for line in output.split("\n"):
+            if "|wmdp_bio_robust " in line and "|acc" in line:
+                match = re.search(r"\|acc\s*\|[^\|]*\|\s*([\d.]+)", line)
+                if match:
+                    results["wmdp_bio_robust"] = float(match.group(1))
+            elif "|mmlu " in line and "|acc" in line:
+                match = re.search(r"\|acc\s*\|[^\|]*\|\s*([\d.]+)", line)
+                if match:
+                    results["mmlu"] = float(match.group(1))
+
+    return results
 
 
 @dataclass
@@ -51,18 +134,48 @@ class TamperAttackConfig:
     batch_size: int = 1
     grad_accumulation: int = 16
     eval_cloze_prob: bool = False
+    eval_mmlu: bool = False
+    optimizer: Literal["adamw", "muon"] = "adamw"
+
+
+class MuonTrainer(Trainer):
+    """Trainer that uses MuonAdamW optimizer."""
+
+    def __init__(self, *args, muon_lr: float = 2e-5, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.muon_lr = muon_lr
+
+    def create_optimizer(self):
+        self.optimizer = MuonAdamW(
+            self.model.parameters(),
+            lr=self.muon_lr,
+            weight_decay=self.args.weight_decay,
+        )
+        return self.optimizer
 
 
 class WMDPEvalCallback(TrainerCallback):
     """Callback to evaluate WMDP accuracy during training and save results."""
 
     def __init__(
-        self, model, eval_every: int, output_path: Path, eval_cloze_prob: bool = False
+        self,
+        model,
+        tokenizer,
+        eval_every: int,
+        output_path: Path,
+        checkpoint_dir: Path,
+        eval_cloze_prob: bool = False,
+        eval_mmlu: bool = False,
+        num_gpus: int = 4,
     ):
         self.model = model
+        self.tokenizer = tokenizer
         self.eval_every = eval_every
         self.output_path = output_path
+        self.checkpoint_dir = checkpoint_dir
         self.eval_cloze_prob = eval_cloze_prob
+        self.eval_mmlu = eval_mmlu
+        self.num_gpus = num_gpus
         self.eval_results = []
 
     def on_step_begin(self, args, state, control, **kwargs):
@@ -75,6 +188,8 @@ class WMDPEvalCallback(TrainerCallback):
             }
             if "cloze_correct_prob" in eval_out:
                 result["cloze_correct_prob"] = eval_out["cloze_correct_prob"]
+            if "mmlu_acc" in eval_out:
+                result["mmlu_acc"] = eval_out["mmlu_acc"]
             self.eval_results.append(result)
             msg = (
                 f"Step {state.global_step}: WMDP Bio Acc = "
@@ -82,29 +197,48 @@ class WMDPEvalCallback(TrainerCallback):
             )
             if "cloze_correct_prob" in eval_out:
                 msg += f", Cloze Correct Prob = {eval_out['cloze_correct_prob']:.4f}"
+            if "mmlu_acc" in eval_out:
+                msg += f", MMLU = {eval_out['mmlu_acc']:.4f}"
             print(msg)
             self._save_results()
 
     def _evaluate_wmdp(self) -> dict:
         self.model.eval()
         out = {}
-        with torch.no_grad():
-            hflm_model = HFLM(self.model)
-            task_manager = TaskManager(
-                verbosity="ERROR",
-                include_path="/home/a6a/lucia.a6a/unlearn/unlearn/lm_eval_tasks",
-            )
-            eval_results = evaluator.simple_evaluate(
-                model=hflm_model,
-                tasks=["wmdp_bio_robust"],
-                device=self.model.device,
-                verbosity="ERROR",
-                num_fewshot=0,
-                task_manager=task_manager,
-            )
-            out["wmdp_bio_acc"] = eval_results["results"]["wmdp_bio_robust"]["acc,none"]
-            del eval_results
-            if self.eval_cloze_prob:
+
+        # Save checkpoint for multi-GPU eval
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        self.model.save_pretrained(self.checkpoint_dir)
+        self.tokenizer.save_pretrained(self.checkpoint_dir)
+
+        # Move model to CPU to free GPU for subprocess eval
+        device = self.model.device
+        self.model.to("cpu")
+        gc.collect()
+        torch.cuda.empty_cache()
+
+        # Run all evals via subprocess with multi-GPU
+        tasks = ["wmdp_bio_robust"]
+        if self.eval_mmlu:
+            tasks.append("mmlu")
+
+        results = run_lmeval_subprocess(
+            str(self.checkpoint_dir), tasks, num_gpus=self.num_gpus
+        )
+
+        out["wmdp_bio_acc"] = results.get("wmdp_bio_robust", 0.25)
+        if self.eval_mmlu and "mmlu" in results:
+            out["mmlu_acc"] = results["mmlu"]
+
+        # Cloze eval: move model back to GPU first
+        self.model.to(device)
+        if self.eval_cloze_prob:
+            with torch.no_grad():
+                hflm_model = HFLM(self.model)
+                task_manager = TaskManager(
+                    verbosity="ERROR",
+                    include_path="/home/a6a/lucia.a6a/unlearn/unlearn/lm_eval_tasks",
+                )
                 cloze_results = evaluator.simple_evaluate(
                     model=hflm_model,
                     tasks=["wmdp_bio_cloze_correct_prob"],
@@ -117,10 +251,10 @@ class WMDPEvalCallback(TrainerCallback):
                     "wmdp_bio_cloze_correct_prob"
                 ]["correct_prob,none"]
                 del cloze_results
-            del hflm_model
-            del task_manager
-            gc.collect()
-            torch.cuda.empty_cache()
+                del hflm_model
+                del task_manager
+
+        gc.collect()
         self.model.train()
         return out
 
@@ -350,8 +484,16 @@ def run_tamper_attack(config: TamperAttackConfig):
     dataset = prepare_dataset(config, tokenizer)
     print(f"Training dataset size: {len(dataset)}")
 
+    checkpoint_dir = output_dir / "eval_checkpoint"
     callback = WMDPEvalCallback(
-        model, config.eval_every, results_path, eval_cloze_prob=config.eval_cloze_prob
+        model,
+        tokenizer,
+        config.eval_every,
+        results_path,
+        checkpoint_dir,
+        eval_cloze_prob=config.eval_cloze_prob,
+        eval_mmlu=config.eval_mmlu,
+        num_gpus=int(os.environ.get("SLURM_GPUS_ON_NODE", 4)),
     )
 
     training_args = TrainingArguments(
@@ -370,12 +512,21 @@ def run_tamper_attack(config: TamperAttackConfig):
         report_to=[],
     )
 
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=dataset,
-        callbacks=[callback],
-    )
+    if config.optimizer == "muon":
+        trainer = MuonTrainer(
+            model=model,
+            args=training_args,
+            train_dataset=dataset,
+            callbacks=[callback],
+            muon_lr=config.lr,
+        )
+    else:
+        trainer = Trainer(
+            model=model,
+            args=training_args,
+            train_dataset=dataset,
+            callbacks=[callback],
+        )
 
     for param in model.parameters():
         param.requires_grad = True
@@ -392,6 +543,8 @@ def run_tamper_attack(config: TamperAttackConfig):
     }
     if "cloze_correct_prob" in final_out:
         final_result["cloze_correct_prob"] = final_out["cloze_correct_prob"]
+    if "mmlu_acc" in final_out:
+        final_result["mmlu_acc"] = final_out["mmlu_acc"]
     callback.eval_results.append(final_result)
     callback._save_results()
 
@@ -402,6 +555,8 @@ def run_tamper_attack(config: TamperAttackConfig):
         line = f"Step {r['step']:4d}: {r['wmdp_bio_acc']*100:.2f}%"
         if "cloze_correct_prob" in r:
             line += f"  Cloze: {r['cloze_correct_prob']*100:.2f}%"
+        if "mmlu_acc" in r:
+            line += f"  MMLU: {r['mmlu_acc']*100:.2f}%"
         print(line)
     print("=" * 50)
 
@@ -471,9 +626,21 @@ def parse_args():
         help="Also evaluate cloze correct probability during training",
     )
     parser.add_argument(
+        "--eval_mmlu",
+        action="store_true",
+        help="Also evaluate MMLU during training",
+    )
+    parser.add_argument(
         "--plot_cloze",
         action="store_true",
         help="In plot_only mode, plot cloze data instead of accuracy",
+    )
+    parser.add_argument(
+        "--optimizer",
+        type=str,
+        choices=["adamw", "muon"],
+        default="adamw",
+        help="Optimizer to use (adamw or muon)",
     )
     return parser.parse_args()
 
@@ -497,6 +664,8 @@ if __name__ == "__main__":
             eval_every=args.eval_every,
             lr=args.lr,
             eval_cloze_prob=args.eval_cloze_prob,
+            eval_mmlu=args.eval_mmlu,
+            optimizer=args.optimizer,
         )
 
         results_path, plot_path = run_tamper_attack(config)

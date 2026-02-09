@@ -188,3 +188,36 @@ All models saved to `models/EleutherAI/deep-ignorance-unfiltered_kl_ret{X}_rm{Y}
 | 2133765 | 0 | 2000 | full (muon) | 512 | 0.0000 | diverged | - | - |
 | 2133784 | 0 | 2000 | full (muon) | 512 | 0.0000 | diverged | - | - |
 | 2133785 | 0 | 2000 | full (muon, lr=5e-4) | 512 | 0.0000 | 0.5941 | 0.2903 | 0.2849 |
+
+## Unconstrained Unlearning: Long Tamper Resistance
+
+Goal: Test whether unconstrained unlearning (retain_coef=0) produces tamper-resistant models. 30 epoch finetune attack (512 bio examples, lr=2e-5, eval every 100 steps).
+
+### ct_fullrank_ret0_rm2000 (SFT AdamW unlearn)
+
+Starting WMDP: 26.5%, Starting MMLU: 23.0%
+
+| Tamper Optimizer | Step 0 WMDP | Step 100 WMDP | Step 500 WMDP | Step 1000 WMDP | Final WMDP | Final MMLU | Status |
+|------------------|-------------|---------------|---------------|----------------|------------|------------|--------|
+| AdamW (short)    | 26.5%       | 26.6%         | -             | -              | 26.6% (step 110) | - | Complete |
+| AdamW (30ep)     | -           | -             | -             | -              | -          | -          | Running |
+| Muon (30ep)      | -           | -             | -             | -              | -          | -          | Running |
+
+### ct_sft_muon_ret0_rm2000 (Muon unlearn)
+
+Starting WMDP: 29.0%, Starting MMLU: 29.3%
+
+| Tamper Optimizer | Step 0 WMDP | Step 100 WMDP | Step 500 WMDP | Step 1000 WMDP | Final WMDP | Final MMLU | Status |
+|------------------|-------------|---------------|---------------|----------------|------------|------------|--------|
+| Muon (short)     | 29.0%       | 28.1%         | 28.6%         | 27.9%          | 28.8% (step 1100) | - | Complete |
+| AdamW (old long) | 29.0%       | 30.2%         | 30.0%         | 29.5%          | 28.9% (step 5500) | 35.9% | Complete |
+| AdamW (30ep)     | 29.0%       | 29.7%         | -             | -              | -          | -          | Running |
+| Muon (30ep)      | -           | -             | -             | -              | -          | -          | Running |
+
+### random_init (control baseline)
+
+Starting WMDP: 26.2%, Starting MMLU: 24.5%
+
+| Tamper Optimizer | Step 0 WMDP | Step 100 WMDP | Step 500 WMDP | Step 1000 WMDP | Final WMDP | Final MMLU | Status |
+|------------------|-------------|---------------|---------------|----------------|------------|------------|--------|
+| AdamW (30ep)     | 26.2%       | 27.1%         | -             | -              | -          | -          | Running |
