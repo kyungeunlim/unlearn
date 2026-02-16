@@ -155,10 +155,9 @@ def main():
 
     # Load dataset (using project's standard datasets)
     print("Loading wikitext dataset...")
-    retain_text_dataset = load_dataset(RETAIN_TEXT_DS_NAME, "wikitext-103-raw-v1")[
+    retain_text_dataset = load_dataset(RETAIN_TEXT_DS_NAME, "bio-retain-corpus")[
         "train"
     ]
-    retain_text_dataset = retain_text_dataset.rename_column("page", "text")
     retain_text_dataset = retain_text_dataset.shuffle(seed=42).select(
         range(
             min(

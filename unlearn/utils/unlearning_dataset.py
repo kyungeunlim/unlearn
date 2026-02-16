@@ -43,10 +43,9 @@ class UnlearningDataset(Dataset):
 
 def get_unlearning_dataset(args, tokenizer, num_proc: int):
     # Load retain_examples
-    retain_text_dataset = load_dataset(RETAIN_TEXT_DS_NAME, "wikitext-103-raw-v1")[
+    retain_text_dataset = load_dataset(RETAIN_TEXT_DS_NAME, "bio-retain-corpus")[
         "train"
     ]
-    retain_text_dataset = retain_text_dataset.rename_column("page", "text")
     retain_text_dataset = retain_text_dataset.shuffle(seed=42).select(
         range(int(args.num_train_examples))
     )

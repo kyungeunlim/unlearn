@@ -160,8 +160,7 @@ def main():
     print(f"Training probes for layers: {layers}")
 
     print("Loading dataset...")
-    dataset = load_dataset(RETAIN_TEXT_DS_NAME, "wikitext-103-raw-v1")["train"]
-    dataset = dataset.rename_column("page", "text")
+    dataset = load_dataset(RETAIN_TEXT_DS_NAME, "bio-retain-corpus")["train"]
     dataset = dataset.shuffle(seed=args.seed)
 
     total_needed = args.num_train_examples + args.num_eval_examples

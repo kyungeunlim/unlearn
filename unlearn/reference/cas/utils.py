@@ -14,10 +14,10 @@ sys.path.append("./lm-evaluation-harness")
 os.environ["TOKENIZERS_PARALLELISM"] = "true"
 MAX_LENGTH = 2048  # context len that the model is being trained with
 RETAIN_CHAT_DS_NAME = "HuggingFaceH4/ultrachat_200k"
-RETAIN_TEXT_DS_NAME = "EleutherAI/wikitext_document_level"
+RETAIN_TEXT_DS_NAME = "cais/wmdp-corpora"
 RETAIN_REFUSAL_COMPLIANCE_DS_NAME = "LLM-LAT/harmful-dataset"
 RETAIN_INCOMPETENT_COMPLIANCE_DS_NAME = "Unlearning/incompetent-compliance"
-BIO_REMOVE_DS_NAME = "Unlearning/WMDP-Bio-Remove-Dataset"
+BIO_REMOVE_DS_NAME = "cais/wmdp-bio-forget-corpus"
 BIO_RETAIN_DS_NAME = "cais/wmdp-corpora"
 BIO_CORRUPT_REWRITTEN_DS_NAME = "Unlearning/wmdp-lie-o-rewritten"
 BIO_CORRUPT_SHUFFLED_DS_NAME = "Unlearning/wmdp-lie-o-shuffled"
