@@ -360,7 +360,7 @@ class SequentialUnlearnConfig:
     retain_coef: float = 5.0
     remove_coef: float = 10.0
     retain_loss_type: Literal["l2", "kl"] = "l2"
-    retain_layers: list[int] = field(default_factory=lambda: [5, 10, 15, 20, 25, 30])
+    retain_layers: list[int] = field(default_factory=lambda: list(range(32)))
     lora_r: int = 16
     start_layer: int | None = None
     end_layer: int = 8

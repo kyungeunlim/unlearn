@@ -509,7 +509,7 @@ class CheckpointTransferConfig:
     adv_lr: float = 2e-3
     attack_iters: int = 8
     lora: bool = True
-    layers: list[int] = field(default_factory=lambda: [5, 10, 15, 20, 25, 30])
+    layers: list[int] = field(default_factory=lambda: list(range(32)))
     model_name: str = "EleutherAI/deep-ignorance-unfiltered"
     save_path: str = ""
     revision: str = "main"

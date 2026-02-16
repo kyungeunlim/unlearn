@@ -9,6 +9,7 @@ import gc
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -16,10 +17,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal, Optional
 
+os.environ.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
+
 import matplotlib.pyplot as plt
 import torch
 from datasets import Dataset as hf_dataset
 from datasets import load_dataset
+from peft import LoraConfig, get_peft_model
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -30,13 +34,24 @@ from transformers import (
 
 from unlearn.utils.muon import MuonAdamW
 
+NEOX_ATTN_MODULES = ["query_key_value", "dense"]
+NEOX_MLP_MODULES = ["dense_h_to_4h", "dense_4h_to_h"]
+NEOX_ALL_MODULES = NEOX_ATTN_MODULES + NEOX_MLP_MODULES
+
+
+def get_target_modules(target: str) -> list[str]:
+    if target == "attn":
+        return NEOX_ATTN_MODULES
+    elif target == "mlp":
+        return NEOX_MLP_MODULES
+    return NEOX_ALL_MODULES
+
+
 sys.path.append("./lm-evaluation-harness")
 
 from lm_eval import evaluator
 from lm_eval.models.huggingface import HFLM
 from lm_eval.tasks import TaskManager
-
-os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 
 MAX_LENGTH = 2048
 REPO_ROOT = Path("/home/a6a/lucia.a6a/unlearn")
@@ -52,6 +67,10 @@ def run_lmeval_subprocess(model_path: str, tasks: list[str], num_gpus: int = 4) 
     tasks_str = ",".join(tasks)
     include_path = str(REPO_ROOT / "unlearn" / "lm_eval_tasks")
     output_dir = Path("/tmp/lm_eval_results")
+
+    # Clean stale results to avoid picking up old JSON files from other runs
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
 
     cmd = [
         sys.executable,
@@ -75,7 +94,7 @@ def run_lmeval_subprocess(model_path: str, tasks: list[str], num_gpus: int = 4) 
         cmd.extend(["--include_path", include_path])
 
     if "mmlu" in tasks_str:
-        cmd.extend(["--num_fewshot", "5"])
+        cmd.extend(["--num_fewshot", "1"])
 
     # Override CUDA_VISIBLE_DEVICES so the subprocess sees all GPUs
     env = os.environ.copy()
@@ -136,6 +155,13 @@ class TamperAttackConfig:
     eval_cloze_prob: bool = False
     eval_mmlu: bool = False
     optimizer: Literal["adamw", "muon"] = "adamw"
+    lora_r: int = 0  # 0 = full finetune
+    lora_target: str = "all"  # all, attn, mlp
+    lr_scheduler_type: str = "constant"  # constant, cosine, linear, etc.
+    warmup_ratio: float = 0.0
+    warmup_steps: int = 0  # when >0, overrides warmup_ratio
+    max_steps: int = -1  # overrides epochs when positive
+    seed: int = 42
 
 
 class MuonTrainer(Trainer):
@@ -208,8 +234,23 @@ class WMDPEvalCallback(TrainerCallback):
 
         # Save checkpoint for multi-GPU eval
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        self.model.save_pretrained(self.checkpoint_dir)
+        is_peft = hasattr(self.model, "merge_adapter")
+        if is_peft:
+            self.model.merge_adapter()
+            self.model.base_model.model.save_pretrained(self.checkpoint_dir)
+            self.model.unmerge_adapter()
+        else:
+            self.model.save_pretrained(self.checkpoint_dir)
         self.tokenizer.save_pretrained(self.checkpoint_dir)
+
+        # Ensure config has 'dtype' for lm_eval compatibility with transformers 4.x
+        config_path = self.checkpoint_dir / "config.json"
+        with open(config_path) as f:
+            config_dict = json.load(f)
+        if "dtype" not in config_dict or config_dict["dtype"] is None:
+            config_dict["dtype"] = config_dict.get("torch_dtype", "float32")
+            with open(config_path, "w") as f:
+                json.dump(config_dict, f, indent=2)
 
         # Move model to CPU to free GPU for subprocess eval
         device = self.model.device
@@ -232,6 +273,9 @@ class WMDPEvalCallback(TrainerCallback):
 
         # Cloze eval: move model back to GPU first
         self.model.to(device)
+        if is_peft:
+            for name, param in self.model.named_parameters():
+                param.requires_grad = "lora_" in name
         if self.eval_cloze_prob:
             with torch.no_grad():
                 hflm_model = HFLM(self.model)
@@ -266,7 +310,9 @@ class WMDPEvalCallback(TrainerCallback):
 
 
 def get_model_and_tokenizer(model_name: str):
-    model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name, device_map="auto", torch_dtype=torch.bfloat16
+    )
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     tokenizer.add_special_tokens(
         {
@@ -328,7 +374,7 @@ def prepare_dataset(config: TamperAttackConfig, tokenizer):
     wmdp_bio_forget = load_dataset("Unlearning/WMDP-Bio-Remove-Dataset")
     training_data = (
         wmdp_bio_forget["train"]
-        .shuffle(seed=42)
+        .shuffle(seed=config.seed)
         .select(range(config.num_train_examples))
     )
     tokenized_training_data = training_data.map(
@@ -343,7 +389,7 @@ def prepare_dataset(config: TamperAttackConfig, tokenizer):
         )
         if (i + 1) % 100 == 0:
             print(f"Processed {i+1} examples, total chunks: {len(chunked_examples)}")
-    return hf_dataset.from_list(chunked_examples).shuffle(seed=42)
+    return hf_dataset.from_list(chunked_examples).shuffle(seed=config.seed)
 
 
 def plot_results(
@@ -481,6 +527,21 @@ def run_tamper_attack(config: TamperAttackConfig):
     results_path = output_dir / f"tamper_results_{timestamp}.json"
 
     model, tokenizer = get_model_and_tokenizer(config.model_name)
+
+    if config.lora_r > 0:
+        target_modules = get_target_modules(config.lora_target)
+        lora_config = LoraConfig(
+            r=config.lora_r,
+            lora_alpha=config.lora_r,
+            target_modules=target_modules,
+            lora_dropout=0.0,
+            bias="none",
+        )
+        model = get_peft_model(model, lora_config)
+        trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        total = sum(p.numel() for p in model.parameters())
+        print(f"LoRA trainable: {trainable:,} / {total:,} ({100*trainable/total:.2f}%)")
+
     dataset = prepare_dataset(config, tokenizer)
     print(f"Training dataset size: {len(dataset)}")
 
@@ -503,10 +564,14 @@ def run_tamper_attack(config: TamperAttackConfig):
         per_device_train_batch_size=config.batch_size,
         per_device_eval_batch_size=config.batch_size,
         num_train_epochs=config.epochs,
+        max_steps=config.max_steps,
         weight_decay=0.01,
         gradient_checkpointing=True,
         save_strategy="no",
-        warmup_steps=0,
+        lr_scheduler_type=config.lr_scheduler_type,
+        warmup_ratio=config.warmup_ratio,
+        warmup_steps=config.warmup_steps,
+        seed=config.seed,
         logging_strategy="steps",
         logging_steps=10,
         report_to=[],
@@ -528,8 +593,9 @@ def run_tamper_attack(config: TamperAttackConfig):
             callbacks=[callback],
         )
 
-    for param in model.parameters():
-        param.requires_grad = True
+    if config.lora_r == 0:
+        for param in model.parameters():
+            param.requires_grad = True
 
     model.train()
     trainer.train()
@@ -609,6 +675,12 @@ def parse_args():
         help="Learning rate",
     )
     parser.add_argument(
+        "--max_steps",
+        type=int,
+        default=-1,
+        help="Max training steps (overrides epochs when positive)",
+    )
+    parser.add_argument(
         "--plot_only",
         type=str,
         default=None,
@@ -642,6 +714,43 @@ def parse_args():
         default="adamw",
         help="Optimizer to use (adamw or muon)",
     )
+    parser.add_argument(
+        "--lora_r",
+        type=int,
+        default=0,
+        help="LoRA rank for tamper attack (0 = full finetune)",
+    )
+    parser.add_argument(
+        "--lora_target",
+        type=str,
+        default="all",
+        choices=["all", "attn", "mlp"],
+        help="LoRA target modules",
+    )
+    parser.add_argument(
+        "--lr_scheduler_type",
+        type=str,
+        default="constant",
+        help="LR scheduler type (constant, cosine, linear, etc.)",
+    )
+    parser.add_argument(
+        "--warmup_ratio",
+        type=float,
+        default=0.0,
+        help="Warmup ratio (fraction of total steps)",
+    )
+    parser.add_argument(
+        "--warmup_steps",
+        type=int,
+        default=0,
+        help="Warmup steps (overrides warmup_ratio when >0)",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for data shuffling and training",
+    )
     return parser.parse_args()
 
 
@@ -666,6 +775,13 @@ if __name__ == "__main__":
             eval_cloze_prob=args.eval_cloze_prob,
             eval_mmlu=args.eval_mmlu,
             optimizer=args.optimizer,
+            lora_r=args.lora_r,
+            lora_target=args.lora_target,
+            lr_scheduler_type=args.lr_scheduler_type,
+            warmup_ratio=args.warmup_ratio,
+            warmup_steps=args.warmup_steps,
+            max_steps=args.max_steps,
+            seed=args.seed,
         )
 
         results_path, plot_path = run_tamper_attack(config)

@@ -1,4 +1,10 @@
-"""Sequential back-to-front unlearning (SFT - full parameter training with FSDP)."""
+"""Sequential back-to-front unlearning (SFT - full parameter training with FSDP).
+
+This module manages FSDP2 wrapping internally because it dynamically toggles
+requires_grad on individual parameters for layer-wise freezing. Launch with
+torchrun or accelerate without an FSDP config — an outer FSDP config will
+double-wrap the model and break the internal grad-shard bookkeeping.
+"""
 
 import math
 import os

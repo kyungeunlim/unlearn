@@ -96,3 +96,9 @@ Two modes for tamper attacks with `run_tamper_attack_with_plot.py`:
 - Catastrophic forgetting runs typically use `retain_coef=0` (no capability preservation)
 
 Standard learning rate for both: `--lr=2e-5`
+
+**Filtered model tamper attacks:**
+- Use `--lr` of 2e-5, 5e-5, or 1e-4 (not higher)
+- lr=2e-4 causes WMDP to drop from 34.6% to 30.5% and MMLU from 46.0% to 37.9% (constant LR, epoch 5 runs)
+- lr=1e-4 with constant LR also degraded MMLU to 44.1%
+- Use `--lr_scheduler_type=cosine --warmup_ratio=0.1` with `--epochs=5 --eval_every=500 --eval_mmlu`

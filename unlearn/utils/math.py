@@ -37,6 +37,14 @@ def effective_rank(A: Tensor) -> float:
     return entropy.exp().item()
 
 
+@torch.inference_mode()
+def empirical_rank(A: Tensor, threshold: float = 0.99) -> int:
+    S = torch.linalg.svdvals(A)
+    cumulative_energy = torch.cumsum(S.pow(2), dim=0)
+    total_energy = cumulative_energy[-1]
+    return int((cumulative_energy < threshold * total_energy).sum().item()) + 1
+
+
 def max_entropy_kl_loss(logits):
     """
     Calculates KL(Uniform || Model) efficiently directly from logits.

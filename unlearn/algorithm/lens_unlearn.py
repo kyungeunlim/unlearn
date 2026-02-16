@@ -254,7 +254,7 @@ class LensUnlearnConfig:
     remove_coef: float = 5.0
     lora_r: float = 16
     lora: bool = True
-    layers: list[int] = field(default_factory=lambda: [5, 10, 15, 20, 25, 30])
+    layers: list[int] = field(default_factory=lambda: list(range(32)))
     model_name: str = "EleutherAI/deep-ignorance-unfiltered"
     save_path: str = ""
     revision: str = "main"

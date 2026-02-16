@@ -310,7 +310,7 @@ class LensMuonUnlearnConfig:
     retain_loss_type: Literal["l2", "kl"] = "kl"
     lr: float = 2e-4
     muon_momentum: float = 0.95
-    layers: list[int] = field(default_factory=lambda: [5, 10, 15, 20, 25, 30])
+    layers: list[int] = field(default_factory=lambda: list(range(32)))
     model_name: str = "EleutherAI/deep-ignorance-unfiltered"
     save_path: str = ""
     revision: str = "main"

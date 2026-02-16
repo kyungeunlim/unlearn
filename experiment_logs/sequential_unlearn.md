@@ -130,8 +130,8 @@ Maximizes entropy over only the top-100 most likely tokens at each position (nor
 | 5 | 31→0 (step 1) | 5 | 5 | 1024 | ~2.96 | ~1.07 | 0.2546 | 0.2450 | Job 2140894, all layers, 32 steps/layer, MMLU collapsed |
 | 6 | 31→0 (step 1) | 10 | 5 | 1024 | ~3.17 | ~1.26 | 0.2350 | 0.2465 | Job 2140895, all layers, 32 steps/layer, MMLU collapsed |
 | 7 | 31→0 (step 1) | 20 | 5 | 1024 | ~3.21 | ~1.18 | 0.2465 | 0.3863 | Job 2140896, all layers, 32 steps/layer |
-| 8 | 31→0 (step 1) | 12 | 5 | 1024 | | | | | Job 2208067, all layers, 32 steps/layer |
-| 9 | 31→0 (step 1) | 15 | 5 | 1024 | | | | | Job 2208068, all layers, 32 steps/layer |
+| 8 | 31→0 (step 1) | 12 | 5 | 1024 | | | | | Job 2242225, all layers, 32 steps/layer |
+| 9 | 31→0 (step 1) | 15 | 5 | 1024 | | | | | Job 2242226, all layers, 32 steps/layer |
 
 ### Top-K Entropy Forget Loss, L2 Retain Loss (SFT + Muon + Keyword Mask)
 

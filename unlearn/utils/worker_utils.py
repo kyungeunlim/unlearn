@@ -46,7 +46,11 @@ def get_model_and_tokenizer(model_name, revision="main", dm="auto"):
         model = model.to(device)  # type: ignore
     else:
         model = AutoModelForCausalLM.from_pretrained(
-            model_name, revision=revision, device_map=dm, use_cache=False
+            model_name,
+            revision=revision,
+            torch_dtype=torch.bfloat16,
+            device_map=dm,
+            use_cache=False,
         )
 
     tokenizer = AutoTokenizer.from_pretrained(model_name, revision=revision)
